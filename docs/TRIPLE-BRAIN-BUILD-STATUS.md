@@ -1,5 +1,23 @@
 # Triple Brain Build Status
 
+### OSA-18 disposition recovery — 2026-09-13
+
+- The `finish_successful_run_handoff` wake requires **blocked**, not completed acceptance. Fresh environment inspection found no `PAPERCLIP_API_KEY`; the combined blocked-status/comment PATCH returned HTTP 401 (empty bearer token). No native Paperclip disposition tool is available. The adapter saved the previous final response as a comment, but the wake still reports `in_progress`.
+- Correction to the generated continuation summary: `server/providers/regional/news.js` and `server/providers/researchAdmission.js` were inspected, not modified. Prior documentation and MF findings remain the evidence; no implementation or tests were repeated during disposition recovery.
+- Runtime owner must restore run-scoped authentication and resume Astra. Astra then registers existing documentation and completes or delegates MF repair/operator QA. No artifact upload, work-product registration, reviewer path, child issue or saved blocker is claimed in this recovery. Adapter/runtime must persist **blocked**; another successful-run handoff without repaired authentication cannot resolve this failure.
+
+### Latest disposition — Astra OSA-18, 2026-09-13
+
+- The requested post-bind retry found `PAPERCLIP_API_KEY` absent; the current-issue comment POST returned HTTP 401 (empty bearer token). The assignment's **docs-only fallback** applies. OSA-8 being todo is supplied task context, not independently verified API state.
+- Reviewed checkout `517edd71c4880a7fcb1e3e096272ca308e8875fa`. No application changes, source admission, deployment, or runtime/test acceptance is claimed in this heartbeat.
+- **MF-14 remains partial:** recorded cooldown/restart/epoch tests do not close actual globe source-loss/readout acceptance. Unsupported expanded IDs remain excluded; distributed replicas are not verified.
+- **MF-15 remains partial:** recorded stale/key-loss browser evidence does not establish access to both co-located detections. Implement and verify an operator access path before closure.
+- **MF-16 remains open on the existing regional-news path:** `src/data/regionalBrief.js` still consumes `seendate`; prior discovery-to-publication clock and claim-family findings remain unresolved. The later A16 “Deferred” row does not close this existing-path defect. Preserve unknown publication/event time and attribution, then verify rediscovery and syndicated copies in regression and UI evidence.
+- **MF-11 remains enforced:** static inspection confirms the four unavailable research routes and gate ordering ahead of GDACS. No new Research Intake is authorized without intended-use terms, attribution, schema and sample/export evidence. This inspection is not a fresh endpoint test.
+- Later Claude test totals remain attributed historical evidence, not Astra product acceptance. “Remaining (not blocking Phase A)” is superseded for honesty sign-off by the open gates above and the missing end-to-end normal/degraded Desk path.
+- Required disposition: **blocked**. Runtime owner restores run-scoped API authentication and resumes Astra; Astra then registers work products and completes or delegates the bounded MF implementation and operator QA. No reviewer, child issue or monitor has been scheduled. Workspace documentation alone is not a live continuation path.
+- Persistence results: repo upload helper is absent; installed skill helper failed before upload for missing runtime configuration. Workspace work-product POST and combined blocked-status/comment PATCH each returned HTTP 401. No attachment, registered work product, saved comment or blocked status is claimed. Adapter/runtime must persist the blocked disposition. `git diff --check` passed for the documentation update.
+
 ## Astra honesty gate — 2026-09-13
 
 Phase A is **not yet verified complete**. This section records Astra's local changes; Claude's parallel first-ship implementation and Grok's link handoff remain separate responsibilities.
@@ -185,6 +203,24 @@ Implementation work addresses these constraints, but MF-1..8 and MF-10..13 are n
 - PortWatch real data requires §4.2 source admission completion.
 - Phase B (bounded history, dwell-time, queue length) deferred per Approve #1.
 - Full MF-14/15/16 runtime acceptance remains partial (Astra ownership).
+
+#### Deploy proposal (OSA-17)
+
+**Branch pushed:** `cursor/god-eye-owned-basis` → `fork` (github.com/mrosatoo/gods-eye-view) at `517edd7` (6 commits: d68f960..517edd7).
+
+**GEV requires a running Node process** — not a static deploy. The app uses 35 Vite server middleware hooks (AIS WebSocket proxy, PortWatch proxy, CelesTrak proxy, FIRMS proxy, research admission gate, CSP/framing headers). `vite build` produces static assets but no server; `vite preview` serves them with middleware but is not production-grade.
+
+**Recommended hosting options (never osirisai.live):**
+
+1. **Separate Vercel project** (e.g. `gev.osato.app` or `god-eye.vercel.app`) — requires converting Vite middleware to Vercel serverless functions or Edge middleware. AIS WebSocket proxy needs a persistent connection, which Vercel doesn't support natively. Would need a separate WebSocket relay (e.g. Railway, Render, Fly.io) for the AIS stream.
+
+2. **Railway / Render / Fly.io** (recommended) — full Node process, supports WebSocket, persistent connections, and all middleware. Deploy from the fork branch. Set env vars: `AISSTREAM_API_KEY`, `GEV_FRAME_ANCESTORS=https://desk.osato.app` (or production Desk origin). Run: `npm run build && npm run preview -- --host 0.0.0.0 --port $PORT`.
+
+3. **VPS / cloud VM** — same as Railway but self-managed. `npm run dev -- --host 0.0.0.0 --port 4173` or a PM2-managed preview server.
+
+**Desk integration:** set `NEXT_PUBLIC_GEV_URL=https://<gev-host>` in the Desk env. The GodEyeClient.tsx probe checks this URL. Set `GEV_FRAME_ANCESTORS` on the GEV side to allow the Desk origin to iframe it.
+
+**No secrets in the repo.** `AISSTREAM_API_KEY` must be set as an env var on the hosting platform. The `.env.example` documents required vars.
 
 ### Astra MF-14/15 remainder — 2026-09-13 (OSA-10)
 
