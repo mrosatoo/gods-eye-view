@@ -100,7 +100,7 @@ export function firmsProxy() {
         // NOT fires.push(...records): spread passes each record as an argument,
         // and a world/2 VIIRS pull exceeds V8's argument limit (~125k) at
         // ~131k records — RangeError, and the whole source is silently dropped.
-        for (const record of records) fires.push(record);
+        for (const record of records) fires.push({ ...record, product: source });
         sources.push({ source, count: records.length, ok: true });
       } catch (err) {
         console.warn(

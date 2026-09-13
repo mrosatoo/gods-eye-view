@@ -96,13 +96,13 @@ export function ingestAisStreamEnvelope(envelope) {
 }
 
 /**
- * Parses an AISStream UTC timestamp into epoch seconds (fallback: now).
+ * Parses an AISStream UTC timestamp into epoch seconds; unknown stays null.
  */
 function aisEpochSeconds(value) {
   const ms = Date.parse(normalizeAisTimestamp(value));
   return Number.isFinite(ms)
     ? Math.floor(ms / 1000)
-    : Math.floor(Date.now() / 1000);
+    : null;
 }
 
 /**
@@ -113,6 +113,7 @@ function aisEpochSeconds(value) {
  * vessels collapse to a single point.
  */
 function appendAisTrackSample(mmsi, lat, lon, epochSec) {
+  if (!Number.isFinite(epochSec) || epochSec > Date.now() / 1000) return;
   let track = _aisStreamTracks.get(mmsi);
   if (!track) {
     const pending = _aisStreamTrackPending.get(mmsi);
@@ -279,10 +280,10 @@ function normalizedHeading(value) {
 
 function normalizeAisTimestamp(value) {
   const text = stringValue(value);
-  if (!text) return new Date().toISOString();
+  if (!text) return null;
   const normalized = text.replace(' +0000 UTC', 'Z').replace(' UTC', 'Z');
   const date = new Date(normalized);
   return Number.isNaN(date.getTime())
-    ? new Date().toISOString()
+    ? null
     : date.toISOString();
 }

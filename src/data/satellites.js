@@ -1,3 +1,4 @@
+import { parseTLE, satelliteElementLabel } from './satelliteProvenance.js';
 import * as Cesium from 'cesium';
 import { twoline2satrec, propagate, gstime, eciToGeodetic, degreesLong, degreesLat } from 'satellite.js';
 import { registerPickOwner, unregisterPickOwner, isOwnedByOtherLayer, resolvePickId } from './pickRegistry.js';
@@ -455,19 +456,6 @@ export function orbitFrameModelMatrix(
 /**
  * Parse TLE text into array of { name, line1, line2 } objects.
  */
-function parseTLE(text) {
-  const lines = text.trim().split('\n').map(l => l.trim()).filter(l => l.length > 0);
-  const result = [];
-  for (let i = 0; i < lines.length - 2; i += 3) {
-    const name = lines[i];
-    const line1 = lines[i + 1];
-    const line2 = lines[i + 2];
-    if (line1.startsWith('1 ') && line2.startsWith('2 ')) {
-      result.push({ name, line1, line2 });
-    }
-  }
-  return result;
-}
 
 /**
  * Propagate satellite position at a given JS Date.
@@ -824,6 +812,7 @@ function _contextSubjectMetadata(noradId, position = null) {
       name,
       operator: '',
       noradId: String(noradId),
+      elementProvenance: satelliteElementLabel(sat.satrec),
       class: satelliteClassLabel(sat.group, { isIss: noradId === ISS_NORAD }),
       altitude: altitudeKm === null ? '' : `${altitudeKm.toLocaleString('en-US')} km`,
     },
@@ -930,7 +919,7 @@ function _updateTrackedSatelliteLabelModel(fallbackAltitudeM = null) {
   // Class leads the detail block: it is what tells the operator WHAT they are
   // looking at, and it stays readable under the IR styles that flatten the
   // dot colors to a single channel (the card is painted above post-FX).
-  const details = [satelliteClassLabel(sat?.group, { isIss: _trackedNorad === ISS_NORAD }), detail];
+  const details = [satelliteClassLabel(sat?.group, { isIss: _trackedNorad === ISS_NORAD }), detail, satelliteElementLabel(sat?.satrec)];
   // Docked companions are consolidated onto the tracked card as SECONDARY info
   // instead of competing with it as separate ambient labels. Identities are
   // preserved: the catalog is untouched and every companion returns to its own
@@ -2054,6 +2043,7 @@ const satellitesLayer = {
       latitude: pos.latitude,
       longitude: pos.longitude,
       altitudeM: pos.altitude,
+      elementProvenance: satelliteElementLabel(sat.satrec),
     };
   },
 

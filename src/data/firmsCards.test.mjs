@@ -40,31 +40,31 @@ function fire(overrides = {}) {
 
 test('buildFireCard: title carries FRP, detail carries conf/age/satellite', () => {
   const card = buildFireCard({ fire: fire(), position: { x: 1, y: 2, z: 3 } }, NOW);
-  assert.equal(card.title, '▲ 1520 MW');
+  assert.equal(card.title, 'NRT DETECTION · 1520 MW');
   assert.equal(card.details.length, 1);
-  assert.equal(card.details[0], 'high · 2h · N20');
+  assert.equal(card.details[0], 'high · acquired 2h ago · N20');
   assert.equal(card.selected, false);
   assert.equal(card.accent, accentForSeverity('red'), 'FRP 1520 is red-hot');
   assert.deepEqual(card.position, { x: 1, y: 2, z: 3 }, 'uses the candidate position untouched');
 });
 
-test('buildFireCard: missing acquisition time omits the age segment', () => {
+test('buildFireCard: missing acquisition time is explicitly unknown', () => {
   const card = buildFireCard({ fire: fire({ acqMs: 0 }), position: {} }, NOW);
-  assert.equal(card.details[0], 'high · N20');
+  assert.equal(card.details[0], 'high · acquisition unknown · N20');
 });
 
 test('buildFireCard: SNPP satellite code renders as SNPP, weak fire is not red', () => {
   const card = buildFireCard({ fire: fire({ satellite: 'N', frp: 0.8, confidence: 0.3 }), position: {} }, NOW);
   assert.match(card.details[0], /SNPP$/);
-  assert.equal(card.title, '▲ 0.8 MW');
+  assert.equal(card.title, 'NRT DETECTION · 0.8 MW');
   assert.notEqual(card.accent, accentForSeverity('red'));
 });
 
 test('buildSelectedFireCard: full detail card with coords, selected flag, no fade', () => {
   const card = buildSelectedFireCard(fire(), NOW);
-  assert.equal(card.title, 'FIRE · 1520 MW');
+  assert.equal(card.title, 'NRT DETECTION · 1520 MW');
   assert.equal(card.selected, true);
-  assert.equal(card.details[0], 'high conf · 2h ago · VIIRS N20');
+  assert.equal(card.details[0], 'high conf · acquired 2h ago · VIIRS N20');
   assert.equal(card.details[1], '61.914°N 122.944°W');
 });
 
@@ -80,7 +80,7 @@ test('buildCellCard: plural noun, max FRP and newest age, accent passthrough', (
     accent: accentForSeverity('orange'),
   };
   const card = buildCellCard(candidate, NOW);
-  assert.equal(card.title, '14 FIRES');
+  assert.equal(card.title, '14 NRT DETECTIONS');
   assert.equal(card.details[0], 'max 210 MW · new 3h');
   assert.equal(card.accent, accentForSeverity('orange'));
 });
@@ -108,7 +108,7 @@ test('fire anchor: cold floor renders at 0, then re-grounds when the floor warms
 test('buildCellCard: singular noun and missing-age omission', () => {
   const candidate = { cell: { count: 1, maxFrp: 9.9, newestAcqMs: 0 }, position: {}, accent: undefined };
   const card = buildCellCard(candidate, NOW);
-  assert.equal(card.title, '1 FIRE');
+  assert.equal(card.title, '1 NRT DETECTION');
   assert.equal(card.details[0], 'max 9.9 MW');
   assert.equal(card.accent, accentForSeverity('yellow'), 'missing accent defaults to yellow');
 });
@@ -210,5 +210,13 @@ test('real FIRMS lifecycle clears host entries on disable and destroy', async ()
     globalThis.fetch = originalFetch;
     if (originalWindow === undefined) delete globalThis.window;
     else globalThis.window = originalWindow;
+  }
+});
+
+test('selected NRT card retains exact product and explicitly flags unknown or future acquisition', () => {
+  for (const [acqMs, label] of [[0, /acquisition unknown/], [NOW + H, /acquisition in future/]]) {
+    const card = buildSelectedFireCard(fire({ acqMs, product: 'VIIRS_NOAA20_NRT', sourceSupport: 'PARTIAL · 1/3 unavailable' }), NOW);
+    assert.match(card.details[0], label);
+    assert.match(card.details[2], /VIIRS_NOAA20_NRT.*PARTIAL/);
   }
 });

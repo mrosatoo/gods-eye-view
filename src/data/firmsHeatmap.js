@@ -337,7 +337,7 @@ export function createFirmsHeatmapLayer({
         latitude: strongest.lat,
         longitude: strongest.lon,
         frp: strongest.frp,
-        label: `Fire · FRP ${formatFrp(strongest.frp)} MW`,
+        label: `NRT detection · FRP ${formatFrp(strongest.frp)} MW`,
       };
     },
 
@@ -450,6 +450,9 @@ export function createFirmsHeatmapLayer({
       const previousSelection = _selectedFire;
       _selectedFire = null;
       _fires = adaptFirmsRecords(payload?.fires);
+      for (const fire of _fires) fire.sourceSupport = [
+        _stale ? 'STALE snapshot' : '', _error || 'VIIRS NRT source support complete',
+      ].filter(Boolean).join(' · ');
       _cellCacheByGrid.clear(); // aggregation is per-dataset — new fires, new cells
       _firesByFrp = [..._fires].sort((a, b) => b.frp - a.frp);
       _count = _fires.length;
@@ -473,6 +476,7 @@ export function createFirmsHeatmapLayer({
     } catch (error) {
       console.warn(`[Data:${id}] FIRMS live load failed:`, error);
       _error = 'NRT detection feed unavailable';
+      for (const fire of _fires) fire.sourceSupport = 'STALE snapshot · NRT feed unavailable';
     } finally {
       _loading = false;
     }
@@ -993,7 +997,7 @@ export function createFirmsHeatmapLayer({
       layerName: name,
       source: 'NASA FIRMS',
       dataSource: _dataSource,
-      label: `Fire · FRP ${formatFrp(fire.frp)} MW`,
+      label: `NRT detection · FRP ${formatFrp(fire.frp)} MW`,
       latitude: fire.lat,
       longitude: fire.lon,
       properties: {
@@ -1001,6 +1005,8 @@ export function createFirmsHeatmapLayer({
         confidence: confidenceBucket(fire.confidence),
         age: fire.acqMs > 0 ? formatAge(Date.now() - fire.acqMs) : 'unknown',
         sensor: fire.sensor || 'unknown',
+        product: fire.product || 'VIIRS NRT',
+        sourceSupport: fire.sourceSupport || 'source coverage unknown',
       },
     });
     return recordId;
@@ -1450,8 +1456,10 @@ export function buildSelectedFireCard(fire, nowMs) {
   const meta = [`${confidenceBucket(fire.confidence)} conf`];
   if (fire.acqMs > 0) {
     const age = formatAge(nowMs - fire.acqMs);
-    if (age) meta.push(`${age} ago`);
+    if (age) meta.push(`acquired ${age} ago`);
   }
+  if (!(fire.acqMs > 0) || !Number.isFinite(fire.acqMs)) meta.push('acquisition unknown');
+  else if (fire.acqMs > nowMs) meta.push('acquisition in future');
   const sat = satelliteShortName(fire.satellite);
   meta.push(sat ? `${fire.sensor || 'VIIRS'} ${sat}` : (fire.sensor || 'sensor n/a'));
   return {
@@ -1462,10 +1470,11 @@ export function buildSelectedFireCard(fire, nowMs) {
     cullPosition: fireCullPosition(fire),
     gapPx: frpPixelSize(fire.frp),
     accent: accentForSeverity(detectionColorStop(fire).name),
-    title: `FIRE · ${formatFrp(fire.frp)} MW`,
+    title: `NRT DETECTION · ${formatFrp(fire.frp)} MW`,
     details: [
       meta.join(' · '),
       formatLatLon(fire.lat, fire.lon) + (fire.night ? ' · NIGHT' : ''),
+      `${fire.product || 'VIIRS NRT'} · ${fire.sourceSupport || 'source coverage unknown'}`,
     ],
     selected: true,
     priority: Number.MAX_SAFE_INTEGER,
@@ -1486,8 +1495,10 @@ export function buildFireCard(candidate, nowMs) {
   const meta = [confidenceBucket(fire.confidence)];
   if (fire.acqMs > 0) {
     const age = formatAge(nowMs - fire.acqMs);
-    if (age) meta.push(age);
+    if (age) meta.push(`acquired ${age} ago`);
   }
+  if (!(fire.acqMs > 0) || !Number.isFinite(fire.acqMs)) meta.push('acquisition unknown');
+  else if (fire.acqMs > nowMs) meta.push('acquisition in future');
   const sat = satelliteShortName(fire.satellite) || fire.sensor;
   if (sat) meta.push(sat);
   return {
@@ -1497,7 +1508,7 @@ export function buildFireCard(candidate, nowMs) {
     cullPosition: candidate.cullPosition || candidate.position,
     gapPx: frpPixelSize(fire.frp),
     accent: accentForSeverity(detectionColorStop(fire).name),
-    title: `▲ ${formatFrp(fire.frp)} MW`,
+    title: `NRT DETECTION · ${formatFrp(fire.frp)} MW`,
     details: [meta.join(' · ')],
     selected: false,
     priority: Number(fire.frp) || 0,
@@ -1514,7 +1525,7 @@ export function buildFireCard(candidate, nowMs) {
  */
 export function buildCellCard(candidate, nowMs) {
   const cell = candidate.cell;
-  const noun = cell.count === 1 ? 'FIRE' : 'FIRES';
+  const noun = cell.count === 1 ? 'NRT DETECTION' : 'NRT DETECTIONS';
   const parts = [`max ${formatFrp(cell.maxFrp)} MW`];
   if (cell.newestAcqMs > 0) {
     const age = formatAge(nowMs - cell.newestAcqMs);

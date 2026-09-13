@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as Cesium from 'cesium';
-import { createFirmsHeatmapLayer, applyFirmsOverlayPolicy, buildCellCard } from './firmsHeatmap.js';
+import { createFirmsHeatmapLayer, applyFirmsOverlayPolicy, buildCellCard, buildSelectedFireCard } from './firmsHeatmap.js';
 import { fireDetectionKey } from './firmsLabels.js';
 import { registerPickOwner, unregisterPickOwner } from './pickRegistry.js';
 import { WORLD_FOCUS_REQUEST_EVENT } from '../worldFocus.js';
@@ -302,6 +302,16 @@ test('NRT feed preserves sensor duplicates, partial support and unknown receipt 
     assert.equal(h.layer.getStats().count, 2, 'two detections, no unique-fire inference');
     assert.match(h.layer.getStats().error, /PARTIAL.*1\/3.*NRT/);
     assert.equal(h.layer.getStats().lastUpdate, payload.fetchedAt);
+    const { adaptFirmsRecords } = await import('./firmsAdapt.js');
+    const cards = adaptFirmsRecords(payload.fires).map(fire => buildSelectedFireCard({
+      ...fire, sourceSupport: h.layer.getStats().error,
+    }, Date.UTC(2026, 8, 12, 7)));
+    assert.notEqual(cards[0].id, cards[1].id);
+    for (const card of cards) {
+      assert.match(card.title, /^NRT DETECTION/);
+      assert.match(card.details[0], /acquired 6h ago/);
+      assert.match(card.details[2], /VIIRS NRT.*PARTIAL.*1\/3/);
+    }
     payload = { fires: [] };
     await h.layer.update();
     assert.equal(h.layer.getStats().lastUpdate, null, 'missing receipt is not current time');

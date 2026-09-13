@@ -205,15 +205,16 @@ test('a tracked docked cluster consolidates its companions onto one card', () =>
   // consolidated companions stay last.
   assert.equal(details[0], 'STATION · ISS', 'the class line names what this is');
   assert.match(details[1], /NORAD 25544$/, 'the altitude line is unchanged');
-  assert.equal(details[2], 'DOCKED · PROGRESS-MS 34 · +1',
+  assert.match(details[2], /PROPAGATED · TLE .* old/);
+  assert.equal(details[3], 'DOCKED · PROGRESS-MS 34 · +1',
     'companions are consolidated, named, and counted on the tracked card');
 
   // Scoping is encoded in that string: THREE neighbours were seeded but only two
   // are counted (the named one plus "+1"). The satellite 50 km away is not part
   // of the cluster and keeps its own identity and label — the owner's explicit
   // constraint that unrelated nearby satellites are never suppressed.
-  assert.doesNotMatch(details[2], /UNRELATED/);
-  assert.doesNotMatch(details[2], /\+2/);
+  assert.doesNotMatch(details[3], /UNRELATED/);
+  assert.doesNotMatch(details[3], /\+2/);
 });
 test('satellite pre-render refreshes the tracked altitude on each propagated frame', () => {
   const entity = { gevLabelModel: { title: 'OLD', details: ['? km'] } };

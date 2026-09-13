@@ -1,3 +1,4 @@
+import { acquisitionMsUtc } from './firmsCsv.js';
 /**
  * Adapter from /api/firms proxy records (src/data/firmsCsv.js shape) to the
  * internal fire-record shape rendered by firmsHeatmap.js. Pure — no Cesium,
@@ -32,6 +33,7 @@ export function adaptFirmsRecords(records) {
       night: record.daynight === 'N',
       acqMs: parseAcquisitionMs(record.acqDate, record.acqTime, acqCache),
       sensor: normalizeSensor(record.instrument),
+      product: typeof record.product === 'string' ? record.product : 'VIIRS NRT',
       satellite: typeof record.satellite === 'string' ? record.satellite : '',
       contextEntity: null,
       position: null,
@@ -73,15 +75,8 @@ export function parseAcquisitionMs(date, time, cache = new Map()) {
   const cached = cache.get(key);
   if (cached !== undefined) return cached;
 
-  const year = Number(date.slice(0, 4));
-  const month = Number(date.slice(5, 7));
-  const day = Number(date.slice(8, 10));
-  const hhmm = String(time ?? '0000').padStart(4, '0');
-  const hours = Number(hhmm.slice(0, 2));
-  const minutes = Number(hhmm.slice(2, 4));
-  const valid = Number.isFinite(year) && Number.isFinite(month) && Number.isFinite(day)
-    && Number.isFinite(hours) && Number.isFinite(minutes);
-  const ms = valid ? Date.UTC(year, month - 1, day, hours, minutes) : 0;
+  const parsed = acquisitionMsUtc(date, time);
+  const ms = Number.isFinite(parsed) ? parsed : 0;
   cache.set(key, ms);
   return ms;
 }

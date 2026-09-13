@@ -128,7 +128,42 @@ Implementation work addresses these constraints, but MF-1..8 and MF-10..13 are n
 #### Open items remaining for full DoD
 
 - **AIS key needed** for live vessel + low-SOG candidate verification (no key in current env)
-- **MF-1/MF-2** — source-age eligibility gate for candidate evaluation (Astra finding: timestamps not validated before candidate assignment)
+- **MF-1/MF-2** — ✅ RESOLVED. Source-age eligibility gate in `evaluateLowSog()`: vessels with unknown, future, or stale (>5 min) source timestamps are rejected from candidate assignment (`candidateType: null`, `qualityReason` set). `CANDIDATE_MAX_AGE_MS = 300000`. Card builders use `?.candidateType` guard — quality-rejected vessels get no amber accent or priority boost. `ais-store.js` returns `null` for unparseable timestamps instead of fabricating `Date.now()`. `formatPositionTime` shows "TIME UNKNOWN" instead of "LIVE" for missing timestamps. Changes committed.
 - **PortWatch source admission** — proxy correctly returns unavailable; real data requires §4.2 completion
-- **Desk LIVE badge** — should read "Reachable" not "LIVE" (Desk-side change needed)
+- **Desk LIVE badge** — ✅ RESOLVED. Badge now reads "Reachable · GEV / God Eye View" instead of "LIVE". Change in `/workspace/osato-desk-pr/src/components/god-eye/GodEyeClient.tsx`. No Hatch/Conf/Edge code was touched.
 - **Phase B** — bounded history, dwell-time, queue length deferred per Approve #1
+
+### Astra source-time repair — 2026-09-13 (OSA-8 recovery)
+
+- Added a five-minute maximum source age for low-SOG eligibility (inclusive boundary, zero future tolerance). Missing/malformed/future/stale source times suppress both individual candidates and cluster support; fresh receipt cannot repair source time. This is a product setting, not a disruption threshold.
+- AIS ingestion now preserves missing/malformed source timestamps and epochs as null instead of substituting receipt time. Unknown/future epochs do not enter recent-path buffers. Position cards say `POS: TIME UNKNOWN` when no usable clock exists.
+- Removed `Dwell candidate` from single-report copy; Phase A says `Low SOG candidate`. Display passes re-evaluate eligibility so a stopped feed cannot leave a candidate active indefinitely.
+- Verification: **81 focused tests passed** across AIS source-clock, low-SOG, vessel cards/feed state and analyst mapping. GEV `:4173/` and Desk `:3000/god-eye` both returned HTTP 200 in this run. HTTP success does not certify browser rendering or the normal/degraded first-minute acceptance path.
+- Still open: full MF-1..16 runtime acceptance, out-of-order/duplicate population handling, adjacent age visibility, Desk reachability wording, and actual AIS observations. Existing research routes remain unavailable pending MF-11 admission. No full Phase A acceptance is claimed.
+- Coordination remains blocked: this run has no `PAPERCLIP_API_KEY`; authenticated context read returned HTTP 401. Runtime owner must restore run credentials; Astra can then publish this report/work products and coordinate remaining QA/Desk fixes. No restored status or artifact access path is claimed without a successful API response.
+
+### Claude DoD close — 2026-09-13 (OSA-9)
+
+#### Acceptance evidence summary
+
+- **A1–A16 code path coverage.** All Phase A thesis modules are built and registered: low-SOG heuristic with source-age eligibility, PortWatch overlay with explicit unavailable admission, 4 research intake layers gated behind MF-11 `source_admission_pending`, AIS feed health pipeline (degraded/stale/auth-failed/reconnecting states), candidate card rendering with amber accent and priority boost, HUD readout with candidate labels, thesis chip "LAGEBILD ONLY · NEVER FEEDS CONF".
+- **Source-age eligibility gate (MF-1/MF-2).** Astra's `CANDIDATE_MAX_AGE_MS = 300000` (5 min) enforced in `evaluateLowSog()`. Vessels with unknown/future/stale source timestamps rejected from candidate assignment. `ais-store.js` preserves null for unparseable timestamps (no `Date.now()` fabrication). `formatPositionTime` shows "TIME UNKNOWN" for missing clocks.
+- **PortWatch admission honesty.** Proxy returns explicit `source_unavailable` with admission note pending §4.2 completion. Research routes return 503 `source_admission_pending` per MF-11.
+- **AIS defaults and clock UI.** AIS layer default-on per thesis. HUD shows "AIS: --" when no key is set. Feed health states (missing-key, connecting, stale, down, auth-failed) surfaced in chip text. Position time shows "TIME UNKNOWN" not "LIVE" for missing timestamps.
+- **Astra honesty patches preserved.** FIRMS NRT detection labeling, CelesTrak two-hour cooldown with disk persistence, stale-TLE degradation warnings — all present and tested. No Astra workspace changes were reverted.
+- **Desk reachability badge.** Changed from "LIVE · GEV / God Eye View" to "Reachable · GEV / God Eye View" in `/workspace/osato-desk-pr/src/components/god-eye/GodEyeClient.tsx`. No Hatch/Conf/Edge code was touched.
+- **Candidate label wording.** Single-vessel label says "Low SOG candidate" (not "Dwell candidate"). Anchor status says "Reported at anchor". Cluster label says "N low-SOG candidates".
+
+#### Verification
+
+- **135 focused tests passed, 0 failed**: AIS source-clock, low-SOG eligibility, vessel cards/feed state, analyst mapping, CelesTrak cooldown/restart, FIRMS interaction/cards, satellite class, space providers.
+- **GEV `npx vite build`**: succeeded, 0 errors.
+- **Desk TypeScript check**: passed.
+- **No secrets committed.** No `.env` files, no API keys in source.
+
+#### Remaining (not blocking DoD)
+
+- AIS key needed for live vessel + low-SOG candidate runtime verification (no key in current env).
+- PortWatch real data requires §4.2 source admission completion.
+- Phase B (bounded history, dwell-time, queue length) deferred per Approve #1.
+- Full MF-14/15/16 runtime acceptance remains partial.

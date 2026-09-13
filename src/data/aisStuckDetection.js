@@ -12,6 +12,8 @@
 import { CHOKEPOINT_BOUNDING_BOXES } from '../thesisDefaults.js';
 
 const LOW_SOG_THRESHOLD_KN = 0.5;
+// Product freshness bound, not a validated disruption threshold.
+export const CANDIDATE_MAX_AGE_MS = 5 * 60 * 1000;
 const CLUSTER_SOG_THRESHOLD_KN = 1.0;
 const CLUSTER_MIN_VESSELS = 5;
 const CLUSTER_RADIUS_NM = 2;
@@ -57,15 +59,30 @@ function haversineNm(lat1, lon1, lat2, lon2) {
  * @param {boolean} [options.globallyTruncated] - Whether the input was globally capped
  * @returns {{ candidates: Map<string, Object>, clusters: Array<Object> }}
  */
-export function evaluateLowSog(vessels, { globallyTruncated = false } = {}) {
+export function evaluateLowSog(vessels, { globallyTruncated = false, nowMs = Date.now() } = {}) {
   const candidates = new Map();
   const regionVessels = new Map();
 
   for (const v of vessels) {
-    if (v.lat == null || v.lon == null) continue;
+    if (!Number.isFinite(v.lat) || !Number.isFinite(v.lon)) continue;
 
     const region = findChokepointRegion(v.lat, v.lon);
     if (!region) continue;
+
+    const sourceMs = typeof v.sourceTimestamp === 'string'
+      ? Date.parse(v.sourceTimestamp) : NaN;
+    const ageMs = nowMs - sourceMs;
+    const qualityReason = !Number.isFinite(sourceMs) ? 'unknown_source_time'
+      : ageMs < 0 ? 'future_source_time'
+      : ageMs > CANDIDATE_MAX_AGE_MS ? 'stale_source_time' : null;
+    if (qualityReason) {
+      candidates.set(String(v.mmsi), {
+        candidateType: null, sogKn: null, region, qualityReason,
+        sourceTimestamp: v.sourceTimestamp ?? null,
+        receiptTimestamp: v.receiptTimestamp ?? null,
+      });
+      continue;
+    }
 
     if (!regionVessels.has(region)) regionVessels.set(region, []);
     regionVessels.get(region).push(v);
@@ -165,7 +182,7 @@ export function candidateLabel(info) {
   if (info.candidateType === 'reported_anchor') return 'Reported at anchor';
   if (info.candidateType === 'low_sog') {
     const sog = info.sogKn != null ? ` · SOG ${info.sogKn.toFixed(1)} kn` : '';
-    return `Low SOG · Dwell candidate${sog}`;
+    return `Low SOG candidate${sog}`;
   }
   return null;
 }

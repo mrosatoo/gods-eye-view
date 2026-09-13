@@ -1246,7 +1246,10 @@ function updateVisibility(force = false) {
   const focusPass = focusPassIsNeeded(focusTarget, state.activeFocusCount)
     && (force || now - state.lastFocusUpdate >= FOCUS_UPDATE_MS);
   if (!regularPass && !focusPass) return;
-  if (regularPass) state.lastVisibilityUpdate = now;
+  if (regularPass) {
+    state.lastVisibilityUpdate = now;
+    applyLowSogCandidates();
+  }
   if (focusPass) state.lastFocusUpdate = now;
   if (!state.vesselRecords.length) {
     // No records — flush any lingering card entries (vanished-feed case).
@@ -1941,9 +1944,9 @@ function formatHeading(heading) {
 }
 
 function formatPositionTime(record) {
-  if (!record.lastPositionUtc) return 'POS: LIVE';
+  if (!record.lastPositionUtc) return 'POS: TIME UNKNOWN';
   const date = new Date(record.lastPositionUtc);
-  if (Number.isNaN(date.getTime())) return 'POS: LIVE';
+  if (Number.isNaN(date.getTime())) return 'POS: TIME UNKNOWN';
   return `POS: ${date.toISOString().slice(11, 19)}Z`;
 }
 

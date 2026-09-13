@@ -38,9 +38,9 @@ test('FIRMS retains large sources in order and filters expired rows', async () =
   const result = await refresh('fixture');
   assert.deepEqual(calls, SOURCES);
   assert.equal(result.fires.length, 200_001);
-  assert.equal(result.fires[0], large[0]);
-  assert.equal(result.fires[199_999], large.at(-1));
-  assert.equal(result.fires.at(-1), last);
+  assert.deepEqual(result.fires[0], { ...large[0], product: SOURCES[0] });
+  assert.deepEqual(result.fires[199_999], { ...large.at(-1), product: SOURCES[0] });
+  assert.deepEqual(result.fires.at(-1), { ...last, product: SOURCES[1] });
   assert.deepEqual(result.sources, SOURCES.map((source, index) => ({
     source, count: [200_000, 1, 0][index], ok: true,
   })));

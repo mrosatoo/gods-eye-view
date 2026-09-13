@@ -207,3 +207,20 @@ test('CelesTrak cooldown preserves aged last-good content and fetch clock', asyn
   assert.equal(second.body, body);
   assert.equal(calls, 1);
 });
+
+test('many clients share one failing refresh and its cooldown in the serving proxy', async (t) => {
+  isolateDisk(t);
+  t.mock.method(console, 'warn', () => {});
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', async () => {
+    calls++;
+    await new Promise(resolve => setTimeout(resolve, 10));
+    return new Response('unavailable', { status: 403 });
+  });
+  const request = install(celestrakProxy());
+  const responses = await Promise.all(Array.from({ length: 20 }, () => request('/api/celestrak', '/stations')));
+  assert.ok(responses.every(response => response.status === 502));
+  assert.equal(calls, 1);
+  await Promise.all(Array.from({ length: 20 }, () => request('/api/celestrak', '/visual')));
+  assert.equal(calls, 1);
+});
