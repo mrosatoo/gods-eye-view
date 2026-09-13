@@ -889,8 +889,9 @@ export function createFirmsHeatmapLayer({
 
   /** Select one stable detection and request one UI-owned camera transfer. */
   function selectAndFocusFire(fire) {
-    if (_selectedFire && fire === _selectedFire) {
-      const siblings = colocatedFires(fire);
+    if (_selectedFire && _selectedFire.lat === fire.lat && _selectedFire.lon === fire.lon
+      && _selectedFire.acqMs === fire.acqMs) {
+      const siblings = colocatedFires(_selectedFire);
       if (siblings.length > 0) {
         fire = siblings[0];
       }
