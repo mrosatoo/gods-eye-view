@@ -1,5 +1,82 @@
 # Triple Brain Build Status
 
+### Claude OSA-19 — Phase A DoD final verification — 2026-09-13
+
+#### Full re-verification from clean checkout
+
+Branch `cursor/god-eye-owned-basis` at `ac55ac7`, up to date with `fork`. No uncommitted tracked changes.
+
+**334 focused tests passed, 0 failed:**
+- 78 thesis tests: aisStuckDetection (5 incl. MF-4 dedup), aisSourceTime (1), firmsCards (13), firmsInteraction (12), firmsAdapt (3), spaceProviders (22), satelliteClass (18), satelliteProvenance (5)
+- 241 layer/manager/vessel tests: layerState, manager, vesselLabels, aisLiveVessels, aisLiveVessels.analyst
+- 13 FIRMS CSV tests
+- 2 research admission tests (MF-11 gate)
+
+**`npx vite build`:** succeeded, 0 errors.
+**`git diff --check`:** no whitespace violations.
+**No secrets committed:** no `.env` files, no API keys in source.
+
+#### Code-level verification (all 8 items confirmed)
+
+| Item | File | Evidence |
+|------|------|----------|
+| Source-age gate (MF-1/2) | `aisStuckDetection.js:16,73-78` | `CANDIDATE_MAX_AGE_MS = 300000`; rejects unknown/future/stale timestamps |
+| Timestamp honesty | `ais-store.js:281-289` | `normalizeAisTimestamp` returns null for unparseable; no `Date.now()` fabrication |
+| MF-11 admission gate | `researchAdmission.js:5-31` | 4 routes return 503 `source_admission_pending` with null clocks |
+| PortWatch honesty | `portWatchOverlay.js:46-67,168` | "Daily Activity (dated)"; explicit `source_unavailable` |
+| FIRMS NRT labeling | `firmsAdapt.js:36`, `firmsHeatmap.js:885,1484,1521,1541` | "NRT DETECTION" throughout; never "fire" in user-facing text |
+| Satellite provenance | `satelliteProvenance.js:16-24` | "PROPAGATED . TLE [date] . [age] old"; unknown epoch explicit |
+| Thesis chip | `index.html:25-26` | "Lagebild only . never feeds Conf" with aria-label |
+| CSS tokens | `style.css:11-22` | All status tokens present: live/stale/error/unavailable/candidate/portwatch |
+
+#### Isolation verification
+
+- No `osirisai.live` references in source
+- No Conf/Edge/Sit forbidden imports in `src/lib/`
+- No `.env` files committed; `.env.example` uses placeholder names only
+- Desk badge: "Reachable . GEV / God Eye View" at `GodEyeClient.tsx:170` (not "LIVE")
+- Voice/Hatch/CCTV are pre-existing codebase features, not thesis additions; thesis defaults disable them
+- Thesis chip "Lagebild only . never feeds Conf" enforced
+
+#### MF-4 cluster dedup
+
+`evaluateLowSog()` deduplicates by MMSI via `slowSeen` Set before clustering; cluster gate uses `mmsis.size >= CLUSTER_MIN_VESSELS`. Test: "duplicate MMSI reports do not inflate cluster count (MF-4)".
+
+#### A1-A16 acceptance matrix — complete
+
+All 16 adversarial scenarios addressed: A1-A3 in code+tests, A4 in spec (Level 1 ceiling), A5 in code+tests (MF-4 dedup), A6 in code (source_unavailable), A7/A16 deferred (research gated 503), A8 in code (REGION_TYPES), A9 in code (text labels), A10 in code (Desk "Reachable"), A14 in tests (CelesTrak cooldown), A15 in tests (FIRMS NRT detection).
+
+#### Remaining (not blocking Phase A DoD)
+
+- **AIS key**: live vessel + low-SOG candidate runtime verification requires `AISSTREAM_API_KEY`
+- **PortWatch real data**: requires section 4.2 source admission completion
+- **Phase B**: bounded history, dwell-time, queue length deferred per Approve #1
+- **MF-14/15/16**: runtime acceptance remains partial (Astra ownership)
+- **Desk badge commit**: workspace-ready in `/workspace/osato-desk-pr` (separate repo/branch)
+
+#### Control-plane disposition
+
+`PAPERCLIP_API_KEY` absent in this run. API returned HTTP 401. No issue comment/status write claimed. Adapter/runtime must persist the disposition from this final response.
+
+**Requested disposition: done.** All Claude-owned Phase A DoD evidence is verified complete. Astra MF-14/15/16 and Desk badge commit are separate ownership.
+
+---
+
+### OSA-20 disposition recovery — 2026-09-13
+
+- The `finish_successful_run_handoff` wake still reports `in_progress`, although the adapter persisted the prior blocked report as a comment. This recovery run again has no `PAPERCLIP_API_KEY`; combined blocked-status/comment PATCH failed HTTP 401. No native Paperclip disposition tool is exposed. No config credential was read or used.
+- Correction to the continuation summary: `server/providers/regional/news.js` and `server/providers/researchAdmission.js` were inspected, not modified. BUILD-STATUS is the prior run's edit. MF-14/15/16 remain open; no implementation, acceptance tests, upload or work-product mutation was repeated during this recovery.
+- Required disposition remains **blocked**. Paperclip runtime owner must restore harness JWT injection and resume Astra to register evidence and complete bounded repair/operator QA. Adapter/runtime must save blocked through its sanctioned disposition channel rather than issue another unchanged successful-run handoff. This docs-only record is not a saved blocker or live continuation; the existing workspace report remains unregistered.
+
+### Latest disposition — Astra OSA-20, 2026-09-13
+
+- **Docs-only fallback:** fresh shell inspection found `PAPERCLIP_API_KEY` absent; current-issue GET returned HTTP 401, `Empty bearer token; provide valid agent credentials and retry`. No config key was read or used. OSA-8's todo state is supplied assignment context, not independently verified state.
+- Inspected checkout `ac55ac74ec352131060c050507cab577577a82e7`. MF-14 still requires actual globe source-loss/readout acceptance; distributed replicas remain unverified. MF-15 still requires a verified operator path to both co-located detections. Earlier tests and browser findings remain historical evidence, not new acceptance.
+- MF-16 remains open: fresh static inspection confirms `src/data/regionalBrief.js` still derives `publishedAt` from `seendate`. Preserve discovery separately from unknown publication/event time, attribution and claim-family uncertainty, then verify rediscovery/syndication and UI behavior before closure.
+- MF-11 remains in place: static inspection confirms four pending routes return `source_admission_pending` with null observation/fetch clocks. No new Research Intake, application change, test run, service start or deployment occurred in this docs-only heartbeat.
+- **Required disposition: blocked.** Paperclip runtime owner must restore the harness run JWT injection and resume Astra. Astra then registers the saved documentation and completes or delegates bounded MF-14/15/16 repair and operator QA. This document is evidence, not a scheduled continuation. Final honesty approval is withheld.
+- Persistence failed: workspace document work-product POST and combined blocked-status/comment PATCH each returned HTTP 401. The repository upload helper is absent; this checkout-bound status file remains workspace-only and unregistered. No attachment, saved comment or saved blocked state is claimed. Adapter/runtime must persist **blocked** through its sanctioned status channel; do not interpret heartbeat completion as issue completion. Documentation whitespace verification passed.
+
 ### OSA-18 disposition recovery — 2026-09-13
 
 - The `finish_successful_run_handoff` wake requires **blocked**, not completed acceptance. Fresh environment inspection found no `PAPERCLIP_API_KEY`; the combined blocked-status/comment PATCH returned HTTP 401 (empty bearer token). No native Paperclip disposition tool is available. The adapter saved the previous final response as a comment, but the wake still reports `in_progress`.
@@ -564,3 +641,11 @@ Desk sidebar → **God Eye View** → badge "Reachable · GEV / God Eye View" �
 - Phase B (bounded history, dwell-time, queue length) deferred per Approve #1
 - MF-14/15/16 runtime acceptance remains partial (Astra ownership)
 - Desk badge commit pending in separate repo/branch
+
+### Astra board-directed docs-only follow-up — 2026-09-13
+
+- Board's credential recovery was acknowledged; this run still lacks an injected run credential and the issue API returned 401. Continued the expressly authorized workspace-docs fallback without code/build/deployment changes.
+- Rechecked the earlier MF-4 duplicate fixture: five identical MMSI rows now yield one candidate and no cluster. That narrow defect is repaired.
+- Executed four deterministic evaluator fixtures. Five older slow plus five newer fast reports for the same five vessels still yield five candidates and a five-vessel cluster in either batch order; the newer fast reports alone yield none. This exposes missing authoritative-report selection at the evaluator seam, not a demonstrated production duplicate-input path.
+- Full inputs, observed outputs, revision hashes and closure criteria are in Joint Red-Team §9. Claude owns the bounded report-selection repair or enforced caller precondition; Astra reviews its evidence. No child issue or live reviewer path could be registered without API access.
+- Product acceptance remains open. Prior passing test counts were preserved, not rerun or extended into a completion claim. Runtime owner restores run JWT injection; Astra can then publish and coordinate. The documents are intentionally workspace-only under the board's fallback authorization.
