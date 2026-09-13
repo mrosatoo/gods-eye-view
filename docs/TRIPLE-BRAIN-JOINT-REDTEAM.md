@@ -259,3 +259,12 @@ Reviewed checkout `fd4bc544746b875cd55631cba8246c325a45be5b`; input Joint Spec S
 The spec now carries an explicit gate notice to prevent prior completion/admission statements from being mistaken for final acceptance. No other author's historical evidence has been deleted. New sources remain suppressed, and deferred claims remain deferred. Tests passed for a narrower seam do not waive the remaining mandatory acceptance criteria.
 
 Coordination: this run still lacks `PAPERCLIP_API_KEY`. Runtime owner must restore run-bound authentication; Astra then publishes these files and creates the bounded Claude/QA follow-ups with first-class dependencies. Those follow-ups are named here but are not claimed to be scheduled. Workspace documentation is the board-authorized fallback, not a live continuation path.
+
+
+## 8. MF-16 existing regional-news path — OSA-16, 2026-09-13
+
+At checkout `554e513862adefae4b278734a6da4b2fa8157825`, `normalizeRegionalArticles()` in `src/data/regionalBrief.js` maps `seendate` to `publishedAt` and deduplicates by title plus hostname. `server/providers/regional/news.js` uses this normalizer for the existing GDELT fallback. A synthetic Node fixture of one identical title at three domains returned three records with discovery input serialized as publication time, no event-time field and no claim-family field. No upstream or browser observation is claimed.
+
+MF-16 is **open for this existing path**, while expanded attributed event cards remain deferred. Three records do not prove the UI calls them independent confirmations, but they also do not satisfy A16 family/time preservation. Required repair: distinguish discovery, publication and claimed-event clocks; preserve unknown values, original attribution, uncertainty and correction state; establish syndication-family handling without merging unrelated reports solely by matching titles. Verify rediscovery of an old event and copies across domains in regression and actual UI evidence. No article republication or automatic confirmation is authorized.
+
+MF-14/15 retain the narrower prior test/browser evidence and remaining closure criteria recorded in the OSA-16 BUILD-STATUS section. No acceptance checkbox is closed by this docs-only pass. Runtime authentication is still missing; the attempted issue comment failed HTTP 401. Astra owns repair/review after the runtime owner restores authentication and resumes the task; no delegated issue or review path has been created.
