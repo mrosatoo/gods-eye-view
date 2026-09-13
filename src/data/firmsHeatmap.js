@@ -766,7 +766,11 @@ export function createFirmsHeatmapLayer({
     _fireByCardId.clear();
 
     if (_selectedFire) {
-      const selectedCard = buildSelectedFireCard(_selectedFire, now);
+      const colocated = _fires.filter((f) =>
+        f !== _selectedFire && f.lat === _selectedFire.lat
+        && f.lon === _selectedFire.lon && f.acqMs === _selectedFire.acqMs,
+      );
+      const selectedCard = buildSelectedFireCard(_selectedFire, now, colocated.length);
       _fireByCardId.set(selectedCard.id, _selectedFire);
       entries.push(selectedCard);
       const screen = Cesium.SceneTransforms.worldToWindowCoordinates(
@@ -876,8 +880,21 @@ export function createFirmsHeatmapLayer({
     }
   }
 
+  function colocatedFires(fire) {
+    if (!fire) return [];
+    return _fires.filter((f) =>
+      f !== fire && f.lat === fire.lat && f.lon === fire.lon && f.acqMs === fire.acqMs,
+    );
+  }
+
   /** Select one stable detection and request one UI-owned camera transfer. */
   function selectAndFocusFire(fire) {
+    if (_selectedFire && fire === _selectedFire) {
+      const siblings = colocatedFires(fire);
+      if (siblings.length > 0) {
+        fire = siblings[0];
+      }
+    }
     selectFire(fire);
     requestWorldFocus({
       kind: 'fire',
@@ -1463,7 +1480,7 @@ function screenSeparated(accepted, screen) {
  * @param {number} nowMs - Current epoch milliseconds.
  * @returns {Object} firmsLabels entry.
  */
-export function buildSelectedFireCard(fire, nowMs) {
+export function buildSelectedFireCard(fire, nowMs, colocatedCount = 0) {
   const meta = [`${confidenceBucket(fire.confidence)} conf`];
   if (fire.acqMs > 0) {
     const age = formatAge(nowMs - fire.acqMs);
@@ -1473,15 +1490,16 @@ export function buildSelectedFireCard(fire, nowMs) {
   else if (fire.acqMs > nowMs) meta.push('acquisition in future');
   const sat = satelliteShortName(fire.satellite);
   meta.push(sat ? `${fire.sensor || 'VIIRS'} ${sat}` : (fire.sensor || 'sensor n/a'));
+  const titleParts = [`NRT DETECTION · ${formatFrp(fire.frp)} MW`];
+  if (colocatedCount > 0) titleParts.push(`SENSOR 1/${colocatedCount + 1} · click to cycle`);
   return {
     id: `selected-fire:${fireDetectionKey(fire)}`,
     actionable: true,
     position: firePosition(fire),
-    // Host-side horizon test uses this instead of the render anchor.
     cullPosition: fireCullPosition(fire),
     gapPx: frpPixelSize(fire.frp),
     accent: accentForSeverity(detectionColorStop(fire).name),
-    title: `NRT DETECTION · ${formatFrp(fire.frp)} MW`,
+    title: titleParts.join(' · '),
     details: [
       meta.join(' · '),
       formatLatLon(fire.lat, fire.lon) + (fire.night ? ' · NIGHT' : ''),
