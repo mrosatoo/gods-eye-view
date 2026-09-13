@@ -475,3 +475,92 @@ Never: `osirisai.live` as prod GEV target. Never foreign Vercel URLs.
 - **Phase B**: bounded history, dwell-time, queue length deferred per Approve #1
 - **MF-14/15/16**: runtime acceptance remains partial (Astra ownership, blocked on PAPERCLIP_API_KEY restoration)
 - **Desk badge commit**: workspace-ready in `/workspace/osato-desk-pr` (separate repo/branch `cursor/osato-desk-trading-dashboard-c6ff`)
+
+---
+
+### Claude OSA-17 — Deploy prep and branch push — 2026-09-13
+
+#### Phase A final state
+
+- **319 focused tests passed, 0 failed**: 78 thesis tests (aisStuckDetection, aisSourceTime, firmsCards, firmsInteraction, firmsAdapt, spaceProviders, satelliteClass, satelliteProvenance, researchAdmission) + 241 layer/manager/vessel tests (layerState, manager, vesselLabels, aisLiveVessels, aisLiveVessels.analyst).
+- **`npx vite build`**: succeeded, 0 errors.
+- **`git diff --check`**: no whitespace violations.
+- **No secrets committed**: `.env` gitignored, `.env.example` uses placeholder names only, no API keys in source.
+- All Phase A implementations confirmed: A1–A16 acceptance matrix complete. Astra honesty patches preserved. Desk badge says "Reachable" not "LIVE". MF-11 research admission gate active. Thesis chip visible.
+
+#### Branch push
+
+Branch `cursor/god-eye-owned-basis` pushed to `fork` (github.com/mrosatoo/gods-eye-view.git). Six commits previously local-only are now published:
+
+1. `69fde6c` — DoD close: source-age gate, honesty patches, Desk reachability
+2. `abfcb2e` — A1–A16 acceptance matrix and verification counts
+3. `fd4bc54` — Astra FIRMS honesty + Desk reachability wording
+4. `554e513` — MF-4 cluster dedup + Astra honesty patches
+5. `517edd7` — Phase A final verification + deploy notes
+6. *(this commit)* — OSA-17 deploy prep
+
+#### GEV hosting proposal — Desk production iframe path
+
+GEV requires a running Node process for its API proxy middleware (AIS, FIRMS, CelesTrak, PortWatch, research routes). A static build (`npm run build`) produces 28 MB of client assets but does **not** include server-side proxies. The `npm run dev` command serves both client and API middleware.
+
+##### Recommended deploy path
+
+| Phase | GEV | Desk | Access | Notes |
+|-------|-----|------|--------|-------|
+| **Alpha** (current) | `npm run dev -- --host 127.0.0.1 --port 4173` | `npm run dev -- --port 3000` | Osato dev box only | Working now |
+| **Beta** | `npm run dev -- --host 0.0.0.0 --port 4173` on a host with `.env` keys | Desk `NEXT_PUBLIC_GEV_URL=http://<host-ip>:4173` | LAN / same machine | Requires trusted network (see `.env.example` HOST warning) |
+| **Staging** | GEV in Docker/PM2 on `gev.osato.internal:4173` behind nginx/caddy with TLS | Desk `NEXT_PUBLIC_GEV_URL=https://gev.osato.internal` | Team review | Reverse proxy adds TLS + access control |
+| **Prod** | Same as staging on `gev.osato.internal` or `gev.osato.dev` | Desk production `NEXT_PUBLIC_GEV_URL` on prod URL | Hedge-fund grade | GEV_FRAME_ANCESTORS must include Desk prod origin |
+
+##### What NOT to do
+
+- **Never** host GEV on `osirisai.live` or any foreign Vercel URL
+- **Never** deploy the static build alone without the API proxy server — AIS, FIRMS and all thesis sources require the Node middleware
+- **Never** expose GEV directly to the internet without a reverse proxy — the dev server brokers API keys
+- **Never** use a separate Vercel project for GEV — Vercel cannot run the persistent WebSocket/proxy middleware that AIS requires
+
+##### Desk integration requirements
+
+GEV `.env`:
+```
+GEV_FRAME_ANCESTORS=<desk-origin>
+AISSTREAM_API_KEY=<key>
+```
+
+Desk `.env.local`:
+```
+NEXT_PUBLIC_GEV_URL=<gev-url>
+```
+
+##### Why not Vercel/Cloudflare Pages
+
+GEV is not a static site for production. The Vite dev server runs persistent middleware:
+- `/api/ais-live` — WebSocket relay to AISStream (long-lived connection, key-brokering)
+- `/api/firms` — FIRMS CSV proxy with server-side key
+- `/api/celestrak` — CelesTrak TLE proxy with failure cooldown and disk cache
+- `/api/portwatch`, `/api/gdacs`, `/api/emsc`, `/api/nws-alerts`, `/api/marine-weather` — thesis research proxies (currently gated 503)
+
+These require a persistent Node process. Serverless edge functions cannot maintain WebSocket connections, in-memory caches or disk-based cooldown state. The correct production path is a long-running Node process behind a reverse proxy.
+
+##### Quick-start for Beta (same machine, two terminals)
+
+```bash
+# Terminal A — GEV
+cd /workspace/gods-eye-view
+nvm use 24.14.0
+npm run dev -- --host 0.0.0.0 --port 4173
+
+# Terminal B — Desk
+cd /workspace/osato-desk-pr
+npm run dev -- --port 3000
+```
+
+Desk sidebar → **God Eye View** → badge "Reachable · GEV / God Eye View" → globe loads.
+
+#### Remaining (unchanged from OSA-15)
+
+- AIS key needed for live vessel + low-SOG candidate runtime verification
+- PortWatch real data requires §4.2 source admission completion
+- Phase B (bounded history, dwell-time, queue length) deferred per Approve #1
+- MF-14/15/16 runtime acceptance remains partial (Astra ownership)
+- Desk badge commit pending in separate repo/branch
