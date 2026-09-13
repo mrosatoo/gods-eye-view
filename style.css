@@ -1,3 +1,32 @@
+/* OSATO GOD EYE — Osiris-inspired Command-Center tokens (owned basis, no Osiris iframe) */
+:root {
+  --gev-osiris-cyan: #00e5ff;
+  --gev-osiris-gold: #ffd700;
+  --gev-osiris-cyan-dim: rgba(0, 229, 255, 0.35);
+  --gev-osiris-gold-dim: rgba(255, 215, 0, 0.28);
+  --gev-osiris-panel: rgba(6, 14, 22, 0.82);
+  --gev-osiris-border: rgba(0, 229, 255, 0.22);
+}
+/* Desk iframe / command-center chrome accents */
+.control-panel,
+.data-panel,
+#location-bar,
+.global-context-panel {
+  border-color: var(--gev-osiris-border) !important;
+  box-shadow: 0 0 0 1px var(--gev-osiris-cyan-dim), 0 8px 28px rgba(0, 0, 0, 0.45);
+}
+.location-pill.active,
+.context-mode-button[aria-selected="true"],
+button.primary {
+  outline-color: var(--gev-osiris-cyan);
+}
+.location-pill:hover {
+  border-color: var(--gev-osiris-cyan-dim);
+}
+.first-run-choices button[data-first-run-choice="shipping"] strong {
+  color: var(--gev-osiris-gold);
+}
+
 /* Preserve component and responsive rule order in one stylesheet entry. */
 @import './src/ui/styles/foundation.css';
 @import './src/ui/styles/controls.css';
