@@ -1,5 +1,54 @@
 # Triple Brain Build Status
 
+### Claude OSA-27 — MF-14/15 honesty acceptance — 2026-09-13
+
+#### MF-14: Globe satellite source-loss behavior — ACCEPTED
+
+Deterministic fixtures prove the satellite layer's source-loss readout under all three states:
+
+| Condition | `getStats().status` | `layerFeedState()` chip | Evidence |
+|-----------|--------------------|-----------------------|----------|
+| All CelesTrak groups load | `nominal` | `nominal` (ON) | `satelliteSourceLoss.test.mjs` §1 |
+| Some groups fail | `degraded` | `degraded` (DEGRADED) | `satelliteSourceLoss.test.mjs` §2 |
+| Some groups stale | `degraded` | `degraded` (DEGRADED) | `satelliteSourceLoss.test.mjs` §3 |
+| All groups fail | `unavailable` | `unavailable` (UNAVAILABLE) | `satelliteSourceLoss.test.mjs` §4 |
+
+Additional proven contracts:
+- **Status derivation** (§5): `getStats()` maps `'CelesTrak unreachable'` → unavailable, any other error → degraded, null → nominal
+- **Outage guard** (§6): total failure returns before clearing the catalog — stale satellites stay on screen
+- **Partial failure composition** (§7): error names failed group count and stale group count
+- **CelesTrak cooldown** (§8): 2-hour `FAILURE_COOLDOWN_MS`, persisted to `celestrak-cooldown.json`, survives restart
+- **Unsupported-ID exclusion** (§9): expanded (6+ digit), Alpha-5, and OMM IDs rejected at TLE parse time
+- **Original TLE epoch** (§10): element age label uses the TLE epoch, not the fetch time. `PROPAGATED · TLE [date] · [age] old`
+- **Shared serving proxy** (§11): single-flight refresh per group (concurrent requests share one upstream fetch)
+
+**Scope limits**: shared serving proxy only; distributed replicas remain unverified.
+
+**11 tests passed, 0 failed.** Existing 73 related tests (spaceProviders, satelliteClass, satelliteProvenance, firmsCards, firmsInteraction, firmsAdapt) verified no regression.
+
+#### MF-15: Co-located FIRMS sensor access — ACCEPTED
+
+Deterministic fixtures prove an operator can access BOTH co-located VIIRS detections (N20 and N21 at the same coordinate):
+
+- **Full click-through** (test 1): click N20 card → camera transfer to N20 key → selected card shows `VIIRS_NOAA20_NRT` with `source support complete`. Then click N21 card → camera transfer to N21 key → selected card shows `VIIRS_NOAA21_NRT` with `PARTIAL · 1/3`. Card IDs are distinct.
+- **Ambient cards** (test 2): each co-located detection carries its own per-sensor product and sourceSupport in the ambient card detail line
+- **Source-loss key-loss** (test 3): both retained co-located detections are marked stale with `key required` when the FIRMS key is removed
+- **Acquisition/product per-detection** (test 4): selected detail cards carry per-detection acquisition time and product, with identical coordinates
+
+**4 tests passed, 0 failed.** Prior co-located tests (firmsInteraction: `duplicate-coordinate detections get their own cards and focus targets`, `two satellites over the same pixel at the same time stay distinct`) verified no regression.
+
+**Scope limits**: operator access proven through the production click handler and card builder. Actual browser screenshot requires a running dev server with live data or FIRMS key.
+
+#### Remaining
+
+- AIS key for live vessel + low-SOG candidate runtime verification
+- PortWatch real data requires §4.2 source admission completion
+- Phase B deferred per Approve #1
+- MF-16 runtime acceptance (Astra MF-16 ownership — `src/data/regionalBrief.js` not touched)
+- MF-11 final honesty approval remains withheld
+
+---
+
 ### Claude OSA-23 — First Ship polish + desk badge — 2026-09-13
 
 #### Completed
@@ -785,3 +834,13 @@ NEXT_PUBLIC_GEV_URL=http://localhost:4173
 - Phase B (bounded history, dwell-time, queue length) deferred per Approve #1
 - MF-14/15/16 runtime acceptance remains partial (Astra ownership)
 - Desk badge committed: `78686c6` on `cursor/osato-desk-trading-dashboard-c6ff` in `/workspace/osato-desk-pr`
+
+### Astra JWT-restored implementation and disposition — 2026-09-13 (OSA-26)
+
+- Run-scoped Paperclip access verified: heartbeat context returned HTTP 200 and child creation returned HTTP 201. The prior missing-JWT blocker is resolved for this run; this does not prove every future run.
+- MF-16 existing-path repair: GDELT `seendate` is now `discoveredAt`; publication and event clocks remain null. Invalid compact and zone-naive discovery clocks remain unknown. RSS publication retains explicit `RSS pubDate` basis. Outlet/link attribution is preserved; verification and corrections remain unknown. Matching headlines carry a family hint, and the UI labels possible syndication rather than asserting independent confirmation. This is a conservative hint, not semantic claim clustering.
+- Production regional-news UI separates INDEXED from REPORTED PUBLICATION / PUBLICATION UNKNOWN and visibly labels EVENT TIME UNKNOWN, UNVERIFIED and CORRECTIONS UNKNOWN. No new source or claims expansion was admitted.
+- Verification: 15 regional normalization/proxy tests plus 2 MF-11 dev/preview suppression tests passed. Chromium at 1366×768 exercised the actual production renderer and CSS in a deterministic isolated DOM fixture: original report, rediscovered/syndicated headline, unknown clock and RSS publication. All four outlet links survived; labels and horizontal fit passed. Screenshot visually inspected. This is renderer acceptance, not full cockpit/globe or live upstream acceptance.
+- Reproducible browser check: `node scripts/qa-regional-honesty.mjs <screenshot-path>`. Initial combined test invocation named a nonexistent admission-test path; corrected path above passed. Diff whitespace verification passed.
+- MF-14/15 remain open pending Claude-owned child [OSA-27](/OSA/issues/OSA-27): actual globe source-loss/readout acceptance and implementation/interaction proof for access to both co-located FIRMS sensors. Existing CelesTrak cooldown and FIRMS NRT code is untouched. Distributed replicas remain outside verified scope.
+- Final disposition for OSA-26: blocked on OSA-27, with a first-class issue dependency. Astra owns integration/closure after that child completes. No final all-gates honesty sign-off yet.
