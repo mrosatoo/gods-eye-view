@@ -207,6 +207,7 @@ test('clicking a fire sprite selects it and requests the camera transfer', () =>
     h.click();
     assert.equal(h.requests.length, 1);
     assert.equal(h.requests[0].kind, 'fire');
+    assert.equal(h.requests[0].label, 'NRT DETECTION');
     assert.equal(h.requests[0].id, fireDetectionKey(fire));
     assert.ok(h.requests[0].position, 'the transfer needs a world position');
   } finally {

@@ -871,7 +871,7 @@ export function createFirmsHeatmapLayer({
     requestWorldFocus({
       kind: 'fire',
       id: fireDetectionKey(fire),
-      label: 'FIRE',
+      label: 'NRT DETECTION',
       position: firePosition(fire),
     });
   }
@@ -1484,8 +1484,7 @@ export function buildSelectedFireCard(fire, nowMs) {
 /**
  * Card model for an ambient fire detection, e.g. title "▲ 47 MW", detail
  * "high · 14h · N20". Ages are computed against each detection's acquisition
- * time — with the live feed everything reads under 24 h (and a stale cache
- * reads truthfully old). Exported for unit tests.
+ * time; receipt does not reset that age. Exported for unit tests.
  * @param {{fire: Object, position: Cesium.Cartesian3}} candidate - Label candidate.
  * @param {number} nowMs - Current epoch milliseconds.
  * @returns {Object} firmsLabels entry.
@@ -1509,7 +1508,10 @@ export function buildFireCard(candidate, nowMs) {
     gapPx: frpPixelSize(fire.frp),
     accent: accentForSeverity(detectionColorStop(fire).name),
     title: `NRT DETECTION · ${formatFrp(fire.frp)} MW`,
-    details: [meta.join(' · ')],
+    details: [
+      meta.join(' · '),
+      `${fire.product || 'VIIRS NRT'} · ${fire.sourceSupport || 'source coverage unknown'}`,
+    ],
     selected: false,
     priority: Number(fire.frp) || 0,
   };

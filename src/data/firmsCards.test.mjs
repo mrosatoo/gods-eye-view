@@ -41,7 +41,7 @@ function fire(overrides = {}) {
 test('buildFireCard: title carries FRP, detail carries conf/age/satellite', () => {
   const card = buildFireCard({ fire: fire(), position: { x: 1, y: 2, z: 3 } }, NOW);
   assert.equal(card.title, 'NRT DETECTION · 1520 MW');
-  assert.equal(card.details.length, 1);
+  assert.equal(card.details.length, 2);
   assert.equal(card.details[0], 'high · acquired 2h ago · N20');
   assert.equal(card.selected, false);
   assert.equal(card.accent, accentForSeverity('red'), 'FRP 1520 is red-hot');
@@ -218,5 +218,17 @@ test('selected NRT card retains exact product and explicitly flags unknown or fu
     const card = buildSelectedFireCard(fire({ acqMs, product: 'VIIRS_NOAA20_NRT', sourceSupport: 'PARTIAL · 1/3 unavailable' }), NOW);
     assert.match(card.details[0], label);
     assert.match(card.details[2], /VIIRS_NOAA20_NRT.*PARTIAL/);
+  }
+});
+
+test('ambient cards qualify both co-located sensors and retained unavailable detections', () => {
+  for (const satellite of ['N20', 'N21']) {
+    const product = satellite === 'N20' ? 'VIIRS_NOAA20_NRT' : 'VIIRS_NOAA21_NRT';
+    for (const sourceSupport of ['PARTIAL · 1/3 unavailable', 'STALE snapshot · NRT feed unavailable']) {
+      const card = buildFireCard({ fire: fire({ satellite, product, sourceSupport, acqMs: NOW - 6 * H }), position: {} }, NOW);
+      assert.match(card.title, /^NRT DETECTION/);
+      assert.match(card.details[0], /acquired 6h ago/);
+      assert.equal(card.details[1], `${product} · ${sourceSupport}`);
+    }
   }
 });
