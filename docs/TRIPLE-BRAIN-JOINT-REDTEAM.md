@@ -268,3 +268,26 @@ At checkout `554e513862adefae4b278734a6da4b2fa8157825`, `normalizeRegionalArticl
 MF-16 is **open for this existing path**, while expanded attributed event cards remain deferred. Three records do not prove the UI calls them independent confirmations, but they also do not satisfy A16 family/time preservation. Required repair: distinguish discovery, publication and claimed-event clocks; preserve unknown values, original attribution, uncertainty and correction state; establish syndication-family handling without merging unrelated reports solely by matching titles. Verify rediscovery of an old event and copies across domains in regression and actual UI evidence. No article republication or automatic confirmation is authorized.
 
 MF-14/15 retain the narrower prior test/browser evidence and remaining closure criteria recorded in the OSA-16 BUILD-STATUS section. No acceptance checkbox is closed by this docs-only pass. Runtime authentication is still missing; the attempted issue comment failed HTTP 401. Astra owns repair/review after the runtime owner restores authentication and resumes the task; no delegated issue or review path has been created.
+
+## 9. Board credential-recovery follow-up — 2026-09-13
+
+Board comment `b223255a-d313-445f-8be7-a062cca91343` directs continued honesty review with docs-only fallback if issue authentication still fails. This run had no injected run credential; the issue context request returned HTTP 401. No alternate credential was retrieved, adapter configuration changed, application code edited, build run or deployment performed.
+
+Reviewed HEAD `ac55ac74ec352131060c050507cab577577a82e7`; evaluator SHA-256 `75e530c1f5145bddc6287734a98686a25d525e0abbce50a47570f9d446e74a36`; Joint Spec SHA-256 `16276d71278ac1ec477ea79e144a03132e85103bd08430a86282ad485aef903b`.
+
+**MF-4 update:** the exact repeated-MMSI cluster defect in §7 no longer reproduces: five identical rows produce one individual candidate and no cluster. This narrow repair does not establish correct conflicting-report selection.
+
+A new deterministic invocation of production `evaluateLowSog()` used `nowMs = Date.parse('2026-09-13T19:50:00Z')`, five distinct MMSIs `100000001` through `100000005`, all at latitude 26.5 / longitude 56.5 and navigation status 0. Each vessel has an older report at `nowMs - 60000` with SOG 0.1 kn and a newer report at `nowMs - 1000` with SOG 5 kn. Both timestamps satisfy the current freshness bound.
+
+| Input | Individual candidates | Cluster counts |
+|---|---:|---|
+| Five identical copies of the first older report | 1 | none |
+| Five older slow rows, then five newer fast rows | 5 | 5 |
+| Five newer fast rows, then five older slow rows | 5 | 5 |
+| Five newer fast rows only | 0 | none |
+
+**Finding:** the evaluator retains older slow support despite newer usable motion reports. It filters slow rows before deduplicating the cluster population; an ordinary newer fast row does not remove an already recorded individual candidate. Reversing the batches does not correct the result. This is pure-function evidence; no claim is made that the production caller supplies duplicate MMSIs or that this cluster is rendered in the live UI.
+
+Required closure, Claude implementation / Astra review: select one authoritative usable report per MMSI before geographic membership, candidate evaluation and clustering. Define tie/conflict and out-of-order behavior explicitly; use the declared rule for denominator counts as well. Add older-slow/newer-fast and older-fast/newer-slow permutations, equal-time conflicts, cross-zone movement and four/five unique-vessel boundaries. If the evaluator instead requires pre-normalized unique inputs, enforce and test that precondition at every caller rather than silently producing unsupported candidates.
+
+Acceptance remains open. The previous 81-test result remains historical evidence and was not rerun. This pass ran the four small fixtures above only. The named follow-up is a proposed owner/action, not a scheduled child issue. Publishing and scheduling still require restored run-bound authentication; the board-authorized workspace review is the deliverable for this fallback pass.

@@ -63,7 +63,17 @@ export function evaluateLowSog(vessels, { globallyTruncated = false, nowMs = Dat
   const candidates = new Map();
   const regionVessels = new Map();
 
+  const byMmsi = new Map();
   for (const v of vessels) {
+    const key = String(v.mmsi);
+    const ts = typeof v.sourceTimestamp === 'string' ? Date.parse(v.sourceTimestamp) : NaN;
+    const prev = byMmsi.get(key);
+    if (!prev || (Number.isFinite(ts) && (!Number.isFinite(prev._ts) || ts > prev._ts))) {
+      byMmsi.set(key, Object.assign({}, v, { _ts: ts }));
+    }
+  }
+
+  for (const v of byMmsi.values()) {
     if (!Number.isFinite(v.lat) || !Number.isFinite(v.lon)) continue;
 
     const region = findChokepointRegion(v.lat, v.lon);

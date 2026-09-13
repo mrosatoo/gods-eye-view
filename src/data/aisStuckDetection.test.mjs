@@ -36,3 +36,35 @@ test('duplicate MMSI reports do not inflate cluster count (MF-4)', () => {
   const { clusters } = evaluateLowSog(dupes, { nowMs });
   assert.deepEqual(clusters, [], 'five copies of one MMSI must not create a cluster');
 });
+test('newer fast report supersedes older slow report for same MMSI (MF-4 §9)', () => {
+  const oldSlow = { mmsi: '111', lat: 26, lon: 56, sog: 0.1,
+    sourceTimestamp: new Date(nowMs - 60000).toISOString() };
+  const newFast = { mmsi: '111', lat: 26, lon: 56, sog: 5.0,
+    sourceTimestamp: new Date(nowMs - 1000).toISOString() };
+  const r1 = evaluateLowSog([oldSlow, newFast], { nowMs });
+  assert.equal(r1.candidates.has('111'), false, 'newer fast report removes slow candidate');
+  const r2 = evaluateLowSog([newFast, oldSlow], { nowMs });
+  assert.equal(r2.candidates.has('111'), false, 'reversed order: same result');
+});
+test('older slow + newer fast reports for five MMSIs yield no cluster (MF-4 §9)', () => {
+  const mixed = [];
+  for (let i = 0; i < 5; i++) {
+    mixed.push({ mmsi: String(100 + i), lat: 26.5, lon: 56.5, sog: 0.1,
+      sourceTimestamp: new Date(nowMs - 60000).toISOString() });
+    mixed.push({ mmsi: String(100 + i), lat: 26.5, lon: 56.5, sog: 5.0,
+      sourceTimestamp: new Date(nowMs - 1000).toISOString() });
+  }
+  const { candidates, clusters } = evaluateLowSog(mixed, { nowMs });
+  for (let i = 0; i < 5; i++) {
+    assert.equal(candidates.has(String(100 + i)), false, `vessel ${100 + i} not a candidate`);
+  }
+  assert.deepEqual(clusters, [], 'no cluster from vessels that are now fast');
+});
+test('older fast + newer slow keeps slow candidate (legitimate slow-down)', () => {
+  const oldFast = { mmsi: '222', lat: 26, lon: 56, sog: 5.0,
+    sourceTimestamp: new Date(nowMs - 60000).toISOString() };
+  const newSlow = { mmsi: '222', lat: 26, lon: 56, sog: 0.1,
+    sourceTimestamp: new Date(nowMs - 1000).toISOString() };
+  const r = evaluateLowSog([oldFast, newSlow], { nowMs });
+  assert.equal(r.candidates.get('222')?.candidateType, 'low_sog');
+});
