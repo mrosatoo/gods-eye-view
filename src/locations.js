@@ -1,6 +1,5 @@
 import * as Cesium from 'cesium';
 import { viewportBias, placesNearViewRecovery } from './annotations/annotationResolver.js';
-import { unavailablePlaceSearch } from './search/placeSearch.js';
 
 /**
  * Points of Interest per city.
@@ -118,7 +117,69 @@ export const CITY_POIS = {
       { name: 'Jefferson Memorial', lat: 38.8814, lon: -77.0365, alt: 400, pitch: -30, heading: 0, buildingHeight: 25 },
     ],
   },
+
+  // Thesis chokepoints (Osato Gate 2026-09-12) — shipping density, not tourist cities.
+  hormuz: {
+    name: 'Hormuz',
+    groundElevation: 0,
+    viewBounds: { southwest: { lat: 25.8, lng: 55.5 }, northeast: { lat: 27.2, lng: 57.2 } },
+    pois: [
+      { name: 'Strait of Hormuz', lat: 26.57, lon: 56.25, alt: 180000, pitch: -55, heading: 45, buildingHeight: 0 },
+      { name: 'Hormuz — Bandar Abbas approach', lat: 27.05, lon: 56.25, alt: 90000, pitch: -45, heading: 180, buildingHeight: 0 },
+      { name: 'Hormuz — Musandam tip', lat: 26.37, lon: 56.52, alt: 70000, pitch: -40, heading: 270, buildingHeight: 0 },
+    ],
+  },
+  suez: {
+    name: 'Suez',
+    groundElevation: 0,
+    viewBounds: { southwest: { lat: 29.5, lng: 32.2 }, northeast: { lat: 31.4, lng: 32.7 } },
+    pois: [
+      { name: 'Suez Canal — mid', lat: 30.45, lon: 32.35, alt: 220000, pitch: -60, heading: 0, buildingHeight: 0 },
+      { name: 'Port Said / Med entrance', lat: 31.25, lon: 32.31, alt: 80000, pitch: -45, heading: 180, buildingHeight: 0 },
+      { name: 'Gulf of Suez / Red Sea end', lat: 29.90, lon: 32.55, alt: 100000, pitch: -45, heading: 0, buildingHeight: 0 },
+    ],
+  },
+  bab: {
+    name: 'Bab el-Mandeb',
+    groundElevation: 0,
+    viewBounds: { southwest: { lat: 11.8, lng: 42.6 }, northeast: { lat: 13.3, lng: 44.0 } },
+    pois: [
+      { name: 'Bab el-Mandeb', lat: 12.58, lon: 43.33, alt: 160000, pitch: -55, heading: 45, buildingHeight: 0 },
+      { name: 'Perim / Mayyun', lat: 12.66, lon: 43.28, alt: 60000, pitch: -40, heading: 90, buildingHeight: 0 },
+      { name: 'Gulf of Aden approach', lat: 12.20, lon: 43.80, alt: 120000, pitch: -50, heading: 300, buildingHeight: 0 },
+    ],
+  },
+  malacca: {
+    name: 'Malacca',
+    groundElevation: 0,
+    viewBounds: { southwest: { lat: 1.0, lng: 100.5 }, northeast: { lat: 5.5, lng: 104.0 } },
+    pois: [
+      { name: 'Strait of Malacca', lat: 2.50, lon: 101.70, alt: 280000, pitch: -60, heading: 135, buildingHeight: 0 },
+      { name: 'Singapore Strait', lat: 1.22, lon: 103.85, alt: 90000, pitch: -45, heading: 45, buildingHeight: 0 },
+      { name: 'Port Klang approach', lat: 2.95, lon: 101.30, alt: 70000, pitch: -40, heading: 90, buildingHeight: 0 },
+    ],
+  },
+  cape: {
+    name: 'Cape of Good Hope',
+    groundElevation: 0,
+    viewBounds: { southwest: { lat: -35.5, lng: 17.5 }, northeast: { lat: -33.5, lng: 20.0 } },
+    pois: [
+      { name: 'Cape of Good Hope / Agulhas route', lat: -34.35, lon: 18.48, alt: 220000, pitch: -55, heading: 90, buildingHeight: 0 },
+      { name: 'Cape Town approaches', lat: -33.90, lon: 18.45, alt: 90000, pitch: -40, heading: 180, buildingHeight: 0 },
+    ],
+  },
+  cobalt: {
+    name: 'Cobalt Belt',
+    groundElevation: 1200,
+    viewBounds: { southwest: { lat: -13.5, lng: 25.0 }, northeast: { lat: -9.5, lng: 29.5 } },
+    pois: [
+      { name: 'DRC Copperbelt / Cobalt corridor', lat: -11.65, lon: 27.48, alt: 350000, pitch: -60, heading: 0, buildingHeight: 0 },
+      { name: 'Lubumbashi area', lat: -11.66, lon: 27.48, alt: 120000, pitch: -45, heading: 45, buildingHeight: 0 },
+      { name: 'Kolwezi area', lat: -10.72, lon: 25.47, alt: 120000, pitch: -45, heading: 90, buildingHeight: 0 },
+    ],
+  },
 };
+
 
 /**
  * Absolute full-earth camera preset for the zoom_to_globe voice tool. The height
@@ -343,35 +404,46 @@ export function findPoiByName(query) {
 export const CANCELLED_SEARCH = Object.freeze({ cancelled: true });
 
 /**
- * Geocode a place name through the supplied service, then fly there at a scale
+ * Geocode a place name using Google Geocoding API, then fly there at a scale
  * appropriate to the request. Countries and cities use their viewport by
  * default; precise landmarks/buildings use close landmark framing.
  */
 export async function searchAndFlyTo(viewer, query, options = {}) {
-  const { placeSearch = unavailablePlaceSearch, signal } = options;
-  signal?.throwIfAborted();
-  const beforeFly = typeof options.beforeFly === 'function' ? options.beforeFly : null;
-  const mayFly = () => !signal?.aborted && (beforeFly === null || beforeFly() !== false);
-  const outcome = await placeSearch.geocode(query, { bias: viewportBias(viewer), signal });
-  signal?.throwIfAborted();
-  const result = outcome.place;
-  let lat = result?.lat;
-  let lng = result?.lng;
-  let label = result?.label || query;
-  let types = result?.types || [];
-  let viewport = result?.viewport || null;
+  const apiKey = window.__GOOGLE_MAPS_API_KEY__ || import.meta.env.GOOGLE_MAPS_API_KEY;
+  if (!apiKey) throw new Error('No Google Maps API key available for geocoding');
 
-  // Nearby landmark recovery retains precedence over a fallback geocoder hit.
-  const recovered = await placesNearViewRecovery(viewer, query,
-    result && !outcome.fallbackUsed ? { lat, lon: lng } : null, signal);
-  signal?.throwIfAborted();
+  const beforeFly = typeof options.beforeFly === 'function' ? options.beforeFly : null;
+  const mayFly = () => beforeFly === null || beforeFly() !== false;
+
+  // Viewport-biased geocode — the same bias annotationResolver's geocodePlace uses:
+  // "Sixth Street" spoken over Austin must prefer the Sixth Street on screen, not a
+  // same-named road in another city (or the wrong end of town — the W 6th vs E 6th bug).
+  let url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&key=${apiKey}`;
+  const bias = viewportBias(viewer);
+  if (bias) url += `&bounds=${bias}`;
+  const response = await fetch(url);
+  const data = await response.json();
+
+  const result = (data.status === 'OK' && data.results?.length) ? data.results[0] : null;
+  let lat = result?.geometry.location.lat;
+  let lng = result?.geometry.location.lng;
+  let label = result ? result.formatted_address : null;
+  let types = result?.types || [];
+  let viewport = result ? (result.geometry.bounds || result.geometry.viewport) : null;
+
+  // Places-near-view recovery (annotationResolver's twin): a missed geocode, or one
+  // that landed implausibly far from the view centre, snaps back to a view-biased
+  // Places hit within the trust bound — "the Capitol" means the one on screen.
+  const recovered = await placesNearViewRecovery(viewer, query, result ? { lat, lon: lng } : null);
   if (recovered) {
     lat = recovered.lat;
     lng = recovered.lon;
-    label = recovered.label || label;
+    label = recovered.label || label || query;
     types = recovered.types || [];
     viewport = placesViewportToBounds(recovered.viewport) || viewport;
-  } else if (!result) return null;
+  } else if (!result) {
+    return null;
+  }
 
   const requestedRange = finitePositive(options.range);
   const duration = finitePositive(options.duration) || 3.0;
