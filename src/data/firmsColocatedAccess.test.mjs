@@ -202,3 +202,49 @@ test('MF-15: acquisition time and product are per-detection in selected detail c
   // Coordinates are identical (same location)
   assert.equal(card20.details[1].replace(/ · NIGHT$/, ''), card21.details[1].replace(/ · NIGHT$/, ''));
 });
+
+test('MF-15: co-located label uses non-ordinal sensor count', () => {
+  const { n20 } = makeColocatedFires();
+  const card = buildSelectedFireCard(n20, Date.now(), 1);
+  assert.match(card.title, /2 SENSORS · click to cycle/);
+  const card3 = buildSelectedFireCard(n20, Date.now(), 2);
+  assert.match(card3.title, /3 SENSORS · click to cycle/);
+});
+
+test('MF-15: N=3 co-located cycling visits every member via stable round-robin', () => {
+  const base = {
+    lat: 30.51, lon: -98.21, frp: 1520.4, confidence: 0.9,
+    sensor: 'VIIRS', acqMs: ACQ_MS,
+  };
+  const fires = [
+    { ...base, index: 0, satellite: 'N20', product: 'VIIRS_NOAA20_NRT', sourceSupport: 'ok' },
+    { ...base, index: 1, satellite: 'N21', product: 'VIIRS_NOAA21_NRT', sourceSupport: 'ok' },
+    { ...base, index: 2, satellite: 'N22', product: 'VIIRS_NOAA22_NRT', sourceSupport: 'ok' },
+  ];
+  const keys = fires.map((f) => fireDetectionKey(f));
+  const h = harness(fires);
+  try {
+    // First click: select fires[0] via its ambient card
+    h.setCardHit(`fire:${keys[0]}`);
+    h.click();
+    assert.equal(h.requests.length, 1);
+    assert.equal(h.requests[0].id, keys[0], 'first click selects N20');
+
+    // Second click: reclick the now-selected card → cycles to fires[1]
+    h.setCardHit(`selected-fire:${keys[0]}`);
+    h.click();
+    assert.equal(h.requests[1].id, keys[1], 'second click cycles to N21');
+
+    // Third click: reclick selected → cycles to fires[2]
+    h.setCardHit(`selected-fire:${keys[1]}`);
+    h.click();
+    assert.equal(h.requests[2].id, keys[2], 'third click cycles to N22');
+
+    // Fourth click: reclick selected → wraps back to fires[0]
+    h.setCardHit(`selected-fire:${keys[2]}`);
+    h.click();
+    assert.equal(h.requests[3].id, keys[0], 'fourth click wraps back to N20');
+  } finally {
+    h.cleanup();
+  }
+});

@@ -891,9 +891,12 @@ export function createFirmsHeatmapLayer({
   function selectAndFocusFire(fire) {
     if (_selectedFire && _selectedFire.lat === fire.lat && _selectedFire.lon === fire.lon
       && _selectedFire.acqMs === fire.acqMs) {
-      const siblings = colocatedFires(_selectedFire);
-      if (siblings.length > 0) {
-        fire = siblings[0];
+      const all = _fires.filter((f) =>
+        f.lat === _selectedFire.lat && f.lon === _selectedFire.lon && f.acqMs === _selectedFire.acqMs,
+      );
+      if (all.length > 1) {
+        const currentIdx = all.indexOf(_selectedFire);
+        fire = all[(currentIdx + 1) % all.length];
       }
     }
     selectFire(fire);
@@ -1492,7 +1495,7 @@ export function buildSelectedFireCard(fire, nowMs, colocatedCount = 0) {
   const sat = satelliteShortName(fire.satellite);
   meta.push(sat ? `${fire.sensor || 'VIIRS'} ${sat}` : (fire.sensor || 'sensor n/a'));
   const titleParts = [`NRT DETECTION · ${formatFrp(fire.frp)} MW`];
-  if (colocatedCount > 0) titleParts.push(`SENSOR 1/${colocatedCount + 1} · click to cycle`);
+  if (colocatedCount > 0) titleParts.push(`${colocatedCount + 1} SENSORS · click to cycle`);
   return {
     id: `selected-fire:${fireDetectionKey(fire)}`,
     actionable: true,

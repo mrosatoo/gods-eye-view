@@ -7,11 +7,13 @@
  * deterministic states:
  *
  *   (i)   NOMINAL — all 6 core groups load valid TLE fixtures; layer shows
- *         satellites, getStats().status === 'nominal', tracked readout > 0.
- *   (ii)  PARTIAL LOSS — 2 groups fail (503); layer status is 'degraded',
- *         error names the failed count, catalog is retained (count > 0).
- *   (iii) TOTAL LOSS — all 6 groups fail; status is 'unavailable',
- *         error is 'CelesTrak unreachable', stale catalog retained on screen.
+ *         satellites, status=nominal, DOM layer chip reads nominal/ON.
+ *         A satellite is selected via trackById and its tracked readout is
+ *         verified for name, altitude, NORAD id, and element provenance.
+ *   (ii)  PARTIAL LOSS — 2 groups fail (503); layer status=degraded,
+ *         DOM chip reads degraded, catalog retained (count > 0).
+ *   (iii) TOTAL LOSS — all 6 groups fail; status=unavailable, DOM chip
+ *         reads unavailable, stale catalog retained on screen.
  *
  * No upstream keys required — all CelesTrak responses are intercepted.
  * Screenshots saved to qa-shots/ (gitignored).
@@ -44,7 +46,6 @@ function record(name, ok, detail) {
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Minimal valid TLE fixture — ISS (ZARYA) with a plausible epoch.
 const TLE_FIXTURE = `ISS (ZARYA)
 1 25544U 98067A   26256.50000000  .00016717  00000-0  10270-3 0  9003
 2 25544  51.6416 247.4627 0006703 130.5360 325.0288 15.72125391480479
@@ -66,6 +67,52 @@ TDRS 13
 `;
 
 const CATALOG_GROUPS = ['stations', 'visual', 'gps-ops', 'glo-ops', 'galileo', 'geo'];
+
+/** Read the satellite layer toggle button's feed state from the DOM. */
+async function readLayerChipState(page) {
+  return page.evaluate(() => {
+    const row = document.querySelector('[data-layer-id="satellites"]');
+    if (!row) return null;
+    const btn = row.querySelector('.data-toggle-btn');
+    if (!btn) return null;
+    return {
+      feedState: btn.dataset.feedState || null,
+      text: btn.textContent?.trim() || null,
+    };
+  });
+}
+
+/** Read the tracked readout from the overlay accessibility layer. */
+async function readTrackedAccessibility(page) {
+  return page.evaluate(() => {
+    const buttons = [...document.querySelectorAll(
+      '#world-overlay-action-list button[data-overlay-action-key]',
+    )];
+    const tracked = buttons.find((b) => {
+      const key = b.dataset.overlayActionKey || '';
+      return key.includes('tracked');
+    });
+    if (tracked) {
+      return { label: tracked.getAttribute('aria-label') || tracked.textContent || '' };
+    }
+    return null;
+  });
+}
+
+/** Enable the satellite layer and wait for catalog to load. */
+async function enableSatellitesAndWait(page, { timeoutS = 30 } = {}) {
+  return page.evaluate(async (tS) => {
+    const dm = window.__godsEyeView.dataManager;
+    await dm.setEnabled('satellites', true);
+    const mod = dm.layers.get('satellites').module;
+    for (let i = 0; i < tS; i++) {
+      await new Promise((r) => setTimeout(r, 1000));
+      const s = mod.getStats();
+      if ((s.count > 0 || s.error) && s.status !== 'loading') return s;
+    }
+    return mod.getStats();
+  }, timeoutS);
+}
 
 async function main() {
   console.log('\nMF-14 Satellite Source-Loss Browser Acceptance');
@@ -120,21 +167,11 @@ async function main() {
       );
       await sleep(1500);
 
-      const stats = await page.evaluate(async () => {
-        const dm = window.__godsEyeView.dataManager;
-        await dm.setEnabled('satellites', true);
-        const mod = dm.layers.get('satellites').module;
-        for (let i = 0; i < 30; i++) {
-          await new Promise((r) => setTimeout(r, 1000));
-          const s = mod.getStats();
-          if (s.count > 0 && s.status !== 'loading') return s;
-        }
-        return mod.getStats();
-      });
+      const stats = await enableSatellitesAndWait(page);
 
       record('NOMINAL: satellites loaded, count > 0',
         stats.count > 0,
-        `count=${stats.count} status=${stats.status} error=${JSON.stringify(stats.error)}`);
+        `count=${stats.count} status=${stats.status}`);
       record('NOMINAL: getStats().status is nominal',
         stats.status === 'nominal',
         `status=${stats.status}`);
@@ -144,19 +181,67 @@ async function main() {
 
       if (stats.count === 0 || stats.status !== 'nominal') exitCode = 1;
 
-      // Verify layerFeedState chip
-      const chip = await page.evaluate(() => {
+      // Read actual DOM layer chip feed state
+      const chip = await readLayerChipState(page);
+      record('NOMINAL: DOM layer chip feedState is nominal',
+        chip?.feedState === 'nominal',
+        `feedState=${chip?.feedState} text=${chip?.text}`);
+      if (chip?.feedState !== 'nominal') exitCode = 1;
+
+      // Select ISS (NORAD 25544) via the public trackById API and verify tracked readout
+      const trackResult = await page.evaluate(async () => {
         const dm = window.__godsEyeView.dataManager;
-        const entry = dm.layers.get('satellites');
-        const stats = entry.module.getStats();
-        // Inline layerFeedState logic to verify the mapping
-        if (stats.status === 'nominal') return 'nominal';
-        if (stats.status === 'degraded') return 'degraded';
-        if (stats.status === 'unavailable') return 'unavailable';
-        return stats.status;
+        const mod = dm.layers.get('satellites').module;
+        const tracked = mod.trackById(25544, { origin: 'user' });
+        await new Promise((r) => setTimeout(r, 2000));
+        window.__godsEyeView.viewer.scene.requestRender?.();
+        await new Promise((r) => setTimeout(r, 500));
+
+        const entity = window.__godsEyeView.viewer.trackedEntity;
+        if (!entity) return { tracked, entity: null };
+
+        const model = entity.gevLabelModel;
+        return {
+          tracked,
+          title: model?.title || null,
+          details: model?.details || null,
+          trackedId: entity.gevTrackedId || null,
+        };
       });
-      record('NOMINAL: layerFeedState chip is nominal', chip === 'nominal', `chip=${chip}`);
-      if (chip !== 'nominal') exitCode = 1;
+
+      record('NOMINAL: ISS tracked via trackById',
+        trackResult.tracked === true,
+        `trackedId=${trackResult.trackedId}`);
+
+      if (trackResult.tracked) {
+        record('NOMINAL: tracked readout title is ISS (ZARYA)',
+          trackResult.title === 'ISS (ZARYA)',
+          `title=${trackResult.title}`);
+
+        const details = trackResult.details || [];
+        const hasNorad = details.some((d) => /NORAD 25544/.test(d));
+        record('NOMINAL: tracked readout includes NORAD 25544',
+          hasNorad,
+          `details=${JSON.stringify(details)}`);
+
+        const hasAltitude = details.some((d) => /\d+ km/.test(d));
+        record('NOMINAL: tracked readout includes altitude',
+          hasAltitude,
+          `details=${JSON.stringify(details)}`);
+
+        const hasProvenance = details.some((d) => /CURRENT TLE|TLE/i.test(d));
+        record('NOMINAL: tracked readout includes element provenance',
+          hasProvenance,
+          `details=${JSON.stringify(details)}`);
+
+        const hasClass = details.some((d) => /STATION|ISS/i.test(d));
+        record('NOMINAL: tracked readout includes satellite class',
+          hasClass,
+          `details=${JSON.stringify(details)}`);
+      } else {
+        record('NOMINAL: tracked readout title is ISS (ZARYA)', false, 'tracking failed');
+        exitCode = 1;
+      }
 
       await page.screenshot({ path: path.join(SHOTS_DIR, 'mf14-nominal.png') });
       await page.close();
@@ -195,17 +280,7 @@ async function main() {
       );
       await sleep(1500);
 
-      const stats = await page.evaluate(async () => {
-        const dm = window.__godsEyeView.dataManager;
-        await dm.setEnabled('satellites', true);
-        const mod = dm.layers.get('satellites').module;
-        for (let i = 0; i < 30; i++) {
-          await new Promise((r) => setTimeout(r, 1000));
-          const s = mod.getStats();
-          if ((s.count > 0 || s.error) && s.status !== 'loading') return s;
-        }
-        return mod.getStats();
-      });
+      const stats = await enableSatellitesAndWait(page);
 
       record('PARTIAL: catalog retained (count > 0)',
         stats.count > 0,
@@ -213,11 +288,17 @@ async function main() {
       record('PARTIAL: getStats().status is degraded',
         stats.status === 'degraded',
         `status=${stats.status}`);
-      record('PARTIAL: error reports failed groups',
+      record('PARTIAL: error reports unavailable groups',
         typeof stats.error === 'string' && /unavailable/i.test(stats.error),
         `error=${JSON.stringify(stats.error)}`);
 
       if (stats.count === 0 || stats.status !== 'degraded') exitCode = 1;
+
+      // Read actual DOM layer chip feed state
+      const chip = await readLayerChipState(page);
+      record('PARTIAL: DOM layer chip feedState is degraded',
+        chip?.feedState === 'degraded',
+        `feedState=${chip?.feedState} text=${chip?.text}`);
 
       await page.screenshot({ path: path.join(SHOTS_DIR, 'mf14-partial-loss.png') });
       await page.close();
@@ -229,7 +310,6 @@ async function main() {
       const page = await browser.newPage();
       await page.setViewport({ width: 1440, height: 900 });
 
-      // First load with nominal data (to seed the catalog), then reload with total failure
       await page.setRequestInterception(true);
       let interceptMode = 'nominal';
       page.on('request', (req) => {
@@ -257,36 +337,31 @@ async function main() {
       );
       await sleep(1500);
 
-      // First: seed the catalog with nominal data
-      const seedStats = await page.evaluate(async () => {
-        const dm = window.__godsEyeView.dataManager;
-        await dm.setEnabled('satellites', true);
-        const mod = dm.layers.get('satellites').module;
-        for (let i = 0; i < 30; i++) {
-          await new Promise((r) => setTimeout(r, 1000));
-          const s = mod.getStats();
-          if (s.count > 0) return s;
-        }
-        return mod.getStats();
-      });
+      // Seed the catalog with nominal data first
+      const seedStats = await enableSatellitesAndWait(page);
       record('TOTAL LOSS setup: catalog seeded',
         seedStats.count > 0,
         `seeded count=${seedStats.count}`);
       const seededCount = seedStats.count;
+
+      // Read DOM chip to confirm nominal state before outage
+      const nominalChip = await readLayerChipState(page);
+      record('TOTAL LOSS setup: DOM chip confirms nominal before outage',
+        nominalChip?.feedState === 'nominal',
+        `feedState=${nominalChip?.feedState}`);
 
       // Switch to total failure mode and trigger a refresh
       interceptMode = 'failure';
       const afterOutage = await page.evaluate(async (seeded) => {
         const dm = window.__godsEyeView.dataManager;
         const mod = dm.layers.get('satellites').module;
-        // Trigger a manual refresh by calling update
         try {
           const viewer = window.__godsEyeView.viewer;
           await mod.update(viewer);
         } catch { /* update may throw on abort */ }
-        await new Promise((r) => setTimeout(r, 2000));
-        const s = mod.getStats();
-        return { ...s, seeded };
+        await new Promise((r) => setTimeout(r, 3000));
+        dm._refreshTogglePanel?.();
+        return mod.getStats();
       }, seededCount);
 
       record('TOTAL LOSS: status is unavailable',
@@ -300,6 +375,12 @@ async function main() {
         `count=${afterOutage.count} seeded=${seededCount}`);
 
       if (afterOutage.status !== 'unavailable' || afterOutage.count === 0) exitCode = 1;
+
+      // Read actual DOM layer chip after total loss
+      const lossChip = await readLayerChipState(page);
+      record('TOTAL LOSS: DOM layer chip feedState is unavailable',
+        lossChip?.feedState === 'unavailable' || lossChip?.feedState === 'stale',
+        `feedState=${lossChip?.feedState} text=${lossChip?.text}`);
 
       await page.screenshot({ path: path.join(SHOTS_DIR, 'mf14-total-loss.png') });
       await page.close();

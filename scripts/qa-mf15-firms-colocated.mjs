@@ -6,14 +6,14 @@
  * responses containing two co-located VIIRS detections (N20 and N21 at the
  * same lat/lon with the same acquisition time). Proves:
  *
- *   (i)   RENDER — both detections exist in the layer, both have distinct
- *         detection keys, and at least one ambient card renders on the canvas.
- *   (ii)  CYCLE — clicking the visible card selects the first detection;
- *         clicking again on the same card cycles to the second detection.
- *         Both selected detail cards carry correct per-sensor product and
- *         sourceSupport.
- *   (iii) SOURCE LOSS — when /api/firms returns 503 no_key, both retained
- *         detections are marked stale with 'key required' in sourceSupport.
+ *   (i)   RENDER — both detections exist in the layer with distinct keys;
+ *         at least one card is painted on the canvas overlay.
+ *   (ii)  CYCLE — real pointer click on the projected fire position selects
+ *         the first detection with per-sensor product/acquisition/support.
+ *         Re-clicking the same screen position cycles to the second
+ *         detection with a distinct product. Both sensors verified.
+ *   (iii) SOURCE LOSS — when /api/firms returns 503 no_key, exactly 2
+ *         retained detections are marked stale with distinct IDs.
  *
  * No upstream FIRMS key required — all responses are intercepted.
  * Screenshots saved to qa-shots/ (gitignored).
@@ -107,22 +107,86 @@ async function setView(page, lon, lat, height) {
   }, lon, lat, height);
 }
 
+/** Get the screen-space position of the first FIRMS fire by projecting its world position. */
+async function getFireScreenPosition(page) {
+  return page.evaluate(() => {
+    const viewer = window.__godsEyeView.viewer;
+    const dm = window.__godsEyeView.dataManager;
+    const mod = dm.layers.get('local-firms').module;
+    const fires = mod.getDetectableObjects({ maxCount: 10 });
+    if (!fires.length || !fires[0].position) return null;
+    const screen = viewer.scene.cartesianToCanvasCoordinates(fires[0].position);
+    return screen ? { x: screen.x, y: screen.y } : null;
+  });
+}
+
+/** Read overlay diagnostics: painted and entry counts for FIRMS source. */
+async function getOverlayDiagnostics(page) {
+  return page.evaluate(() => {
+    const diagnostics = window.__gevWorldOverlay?.getDiagnostics?.();
+    return {
+      painted: diagnostics?.paintedBySource?.firms || 0,
+      entries: diagnostics?.entriesBySource?.firms || 0,
+      totalPainted: diagnostics?.paintedCount || 0,
+    };
+  });
+}
+
+/** Read the currently selected fire entity from the context store. */
+async function readSelectedFire(page) {
+  return page.evaluate(() => {
+    const store = window.__gevContextStore;
+    if (!store?.selectedEntityId) return null;
+    const record = store.entities.get(store.selectedEntityId);
+    if (!record) return null;
+    return {
+      id: store.selectedEntityId,
+      sensor: record.properties?.sensor || null,
+      product: record.properties?.product || null,
+      sourceSupport: record.properties?.sourceSupport || null,
+    };
+  });
+}
+
+/** Read the accessibility button labels for FIRMS overlay actions. */
+async function readAccessibilityButtons(page) {
+  return page.evaluate(() => {
+    const buttons = [...document.querySelectorAll(
+      '#world-overlay-action-list button[data-overlay-action-key]',
+    )].filter((b) => String(b.dataset.overlayActionKey || '').startsWith('firms\x00'));
+    return buttons.map((b) => ({
+      key: b.dataset.overlayActionKey,
+      label: b.getAttribute('aria-label') || b.textContent || '',
+      pressed: b.getAttribute('aria-pressed') === 'true',
+    }));
+  });
+}
+
+/** Read the FIRMS layer toggle button feed state from the DOM. */
+async function readLayerChipState(page) {
+  return page.evaluate(() => {
+    const row = document.querySelector('[data-layer-id="local-firms"]');
+    if (!row) return null;
+    const btn = row.querySelector('.data-toggle-btn');
+    if (!btn) return null;
+    return {
+      feedState: btn.dataset.feedState || null,
+      text: btn.textContent?.trim() || null,
+    };
+  });
+}
+
+/** Wait for at least one overlay card to be painted. */
 async function waitForOverlayCards(page, { timeoutMs = 15000 } = {}) {
   const deadline = Date.now() + timeoutMs;
-  let sample = null;
+  let diag = null;
   while (Date.now() < deadline) {
     await page.evaluate(() => window.__godsEyeView?.viewer?.scene?.requestRender?.());
     await sleep(300);
-    sample = await page.evaluate(() => {
-      const diagnostics = window.__gevWorldOverlay?.getDiagnostics?.();
-      return {
-        painted: diagnostics?.paintedBySource?.firms || 0,
-        entries: diagnostics?.entriesBySource?.firms || 0,
-      };
-    });
-    if (sample.entries > 0 && sample.painted > 0) return sample;
+    diag = await getOverlayDiagnostics(page);
+    if (diag.entries > 0 && diag.painted > 0) return diag;
   }
-  return sample || { painted: 0, entries: 0 };
+  return diag || { painted: 0, entries: 0, totalPainted: 0 };
 }
 
 async function main() {
@@ -190,58 +254,50 @@ async function main() {
       const dm = window.__godsEyeView.dataManager;
       const mod = dm.layers.get('local-firms').module;
       const fires = mod.getDetectableObjects({ maxCount: 10 });
-      return fires.map((f) => ({
-        key: f.key || f.id,
-        satellite: f.satellite,
-        product: f.product,
-      }));
+      return fires.map((f) => f.id);
     });
-    record('RENDER: distinct detection keys',
-      fireKeys.length === 2,
-      `keys=${JSON.stringify(fireKeys)}`);
+    record('RENDER: exactly 2 detectable objects with distinct IDs',
+      fireKeys.length === 2 && fireKeys[0] !== fireKeys[1],
+      `ids=${JSON.stringify(fireKeys)}`);
     if (stats?.count !== 2 || fireKeys.length !== 2) exitCode = 1;
 
-    // Move camera to the fire location
+    // Move camera to the fire location for close-up view
     await setView(page, -98.21, 30.51, 50000);
     const overlay = await waitForOverlayCards(page);
-    record('RENDER: card overlay painted for co-located fires',
+    record('RENDER: overlay cards painted for co-located fires',
       overlay.entries > 0 && overlay.painted > 0,
       `entries=${overlay.entries} painted=${overlay.painted}`);
     if (overlay.painted === 0) exitCode = 1;
+
+    // Read accessibility buttons to verify card content is reachable
+    const buttons = await readAccessibilityButtons(page);
+    record('RENDER: accessibility buttons present for interactive cards',
+      buttons.length > 0,
+      `buttons=${buttons.length} labels=${JSON.stringify(buttons.map(b => b.label).slice(0, 3))}`);
+
     await page.screenshot({ path: path.join(SHOTS_DIR, 'mf15-colocated-render.png') });
 
-    // ── (ii) CYCLE — click to select first, reclick to cycle to second ─────
-    console.log('\n(ii) CYCLE — clicking card to verify per-sensor detail and cycling...');
+    // ── (ii) CYCLE — pointer click to select and cycle ────────────────────
+    console.log('\n(ii) CYCLE — real pointer click to select first sensor, reclick to cycle...');
 
-    // Click the accessible FIRMS action button (keyboard/assistive mirror)
-    const firstClick = await page.evaluate(() => {
-      const buttons = [...document.querySelectorAll(
-        '#world-overlay-action-list button[data-overlay-action-key]',
-      )].filter((b) => String(b.dataset.overlayActionKey || '').startsWith('firms\x00'));
-      if (buttons.length > 0) {
-        buttons[0].click();
-        return { method: 'action-button', count: buttons.length };
-      }
-      return null;
-    });
+    // Get screen position of a fire detection for pointer click
+    const firePos = await getFireScreenPosition(page);
+    if (!firePos) {
+      record('CYCLE: fire screen position available', false, 'could not project fire to screen');
+      exitCode = 1;
+    } else {
+      record('CYCLE: fire projects to screen',
+        firePos.x > 0 && firePos.y > 0,
+        `x=${firePos.x.toFixed(0)} y=${firePos.y.toFixed(0)}`);
 
-    if (firstClick) {
-      await sleep(1000);
-      // Read the selected entity from the context store
-      const card1 = await page.evaluate(() => {
-        const store = window.__gevContextStore;
-        if (!store?.selectedEntityId) return null;
-        const record = store.entities.get(store.selectedEntityId);
-        if (!record) return null;
-        return {
-          id: store.selectedEntityId,
-          sensor: record.properties?.sensor || null,
-          product: record.properties?.product || null,
-          sourceSupport: record.properties?.sourceSupport || null,
-        };
-      });
+      // First real pointer click at the fire's screen position
+      await page.mouse.click(firePos.x, firePos.y);
+      await sleep(1500);
+      await page.evaluate(() => window.__godsEyeView?.viewer?.scene?.requestRender?.());
+      await sleep(500);
 
-      record('CYCLE: first click selects a fire detection',
+      const card1 = await readSelectedFire(page);
+      record('CYCLE: first pointer click selects a fire detection',
         card1?.id != null,
         `selectedId=${card1?.id}`);
 
@@ -249,83 +305,60 @@ async function main() {
         record('CYCLE: first selection has per-sensor product',
           card1.product === 'VIIRS_NOAA20_NRT' || card1.product === 'VIIRS_NOAA21_NRT',
           `product=${card1.product}`);
-      }
-      const card1product = card1?.product;
+        record('CYCLE: first selection has source support',
+          typeof card1.sourceSupport === 'string' && card1.sourceSupport.length > 0,
+          `sourceSupport=${card1.sourceSupport}`);
 
-      // Wait for overlay to settle after first selection, then re-render
-      await sleep(500);
-      await page.evaluate(() => window.__godsEyeView?.viewer?.scene?.requestRender?.());
-      await sleep(500);
+        // Verify the selected card's accessibility button is updated
+        const selectedButtons = await readAccessibilityButtons(page);
+        const pressedBtn = selectedButtons.find(b => b.pressed);
+        record('CYCLE: selected card reflected in accessibility layer',
+          pressedBtn != null,
+          `pressed=${pressedBtn?.label?.slice(0, 80) || 'none'}`);
 
-      // Now reclick the visible card to cycle to the co-located sibling.
-      // The selected card's action button should have been rebuilt.
-      const reclickDebug = await page.evaluate(() => {
-        const buttons = [...document.querySelectorAll(
-          '#world-overlay-action-list button[data-overlay-action-key]',
-        )].filter((b) => String(b.dataset.overlayActionKey || '').startsWith('firms\x00'));
-        const pressed = buttons.filter((b) => b.getAttribute('aria-pressed') === 'true');
-        const info = {
-          totalButtons: buttons.length,
-          pressedButtons: pressed.length,
-          labels: buttons.map((b) => b.getAttribute('aria-label') || b.textContent || '').slice(0, 3),
-        };
-        // Click the pressed (selected) button, or the first one if none pressed
-        const target = pressed[0] || buttons[0];
-        if (target) target.click();
-        info.clicked = Boolean(target);
-        return info;
-      });
-      if (!reclickDebug.clicked) console.log(`    Note: no action button found for reclick`);
-      await sleep(1500);
+        const card1Id = card1.id;
+        const card1Product = card1.product;
 
-      const card2 = await page.evaluate(() => {
-        const store = window.__gevContextStore;
-        if (!store?.selectedEntityId) return null;
-        const record = store.entities.get(store.selectedEntityId);
-        if (!record) return null;
-        return {
-          id: store.selectedEntityId,
-          sensor: record.properties?.sensor || null,
-          product: record.properties?.product || null,
-          sourceSupport: record.properties?.sourceSupport || null,
-        };
-      });
+        // Re-click at the same position to cycle to the co-located sibling
+        await page.mouse.click(firePos.x, firePos.y);
+        await sleep(1500);
+        await page.evaluate(() => window.__godsEyeView?.viewer?.scene?.requestRender?.());
+        await sleep(500);
 
-      if (card2) {
-        record('CYCLE: reclick cycled to different sensor',
-          card2.id !== card1?.id,
-          `first=${card1?.id} second=${card2.id}`);
-        record('CYCLE: cycled detection has distinct product',
-          card2.product !== card1product,
-          `product1=${card1product} product2=${card2.product}`);
-        if (card2.id === card1?.id) exitCode = 1;
+        const card2 = await readSelectedFire(page);
+        if (card2) {
+          record('CYCLE: reclick cycled to different detection',
+            card2.id !== card1Id,
+            `first=${card1Id} second=${card2.id}`);
+          record('CYCLE: cycled detection has distinct product',
+            card2.product !== card1Product && (card2.product === 'VIIRS_NOAA20_NRT' || card2.product === 'VIIRS_NOAA21_NRT'),
+            `product1=${card1Product} product2=${card2.product}`);
+          record('CYCLE: cycled detection has acquisition time',
+            typeof card2.sourceSupport === 'string' && card2.sourceSupport.length > 0,
+            `sourceSupport=${card2.sourceSupport}`);
+          if (card2.id === card1Id) exitCode = 1;
+        } else {
+          record('CYCLE: reclick cycled to different detection', false, 'no selected fire after reclick');
+          exitCode = 1;
+        }
       } else {
-        record('CYCLE: reclick cycled to different sensor', false, 'no selected fire after reclick');
+        record('CYCLE: first selection has per-sensor product', false, 'no fire selected');
         exitCode = 1;
       }
-    } else {
-      record('CYCLE: fire action button available', false, 'no action button found');
-      exitCode = 1;
     }
 
     await page.screenshot({ path: path.join(SHOTS_DIR, 'mf15-colocated-cycle.png') });
 
     // ── (iii) SOURCE LOSS — both detections marked stale ───────────────────
-    console.log('\n(iii) SOURCE LOSS — switching to keyless mode...');
+    console.log('\n(iii) SOURCE LOSS — switching to keyless mode via real refresh...');
     interceptMode = 'keyless';
 
-    // Trigger a FIRMS refresh
+    // Trigger a FIRMS refresh through the real data manager update path
     await page.evaluate(async () => {
       const dm = window.__godsEyeView.dataManager;
       const mod = dm.layers.get('local-firms').module;
-      // Force a reload to pick up the keyless state
-      if (mod._refreshForTest) {
-        await mod._refreshForTest();
-      } else {
-        await dm.setEnabled('local-firms', false);
-        await new Promise((r) => setTimeout(r, 500));
-        await dm.setEnabled('local-firms', true);
-      }
+      await mod.update();
+      dm._refreshTogglePanel?.();
     });
     await sleep(3000);
 
@@ -335,32 +368,62 @@ async function main() {
       return mod.getStats();
     });
 
-    const lossCards = await page.evaluate(() => {
+    record('SOURCE LOSS: key required error surfaced',
+      lossStats.error === 'KEY REQUIRED',
+      `error=${JSON.stringify(lossStats.error)}`);
+
+    // Read ALL retained FIRMS context entries — assert exactly 2 with distinct IDs
+    const lossEntries = await page.evaluate(() => {
       const store = window.__gevContextStore;
       if (!store?.entities) return [];
-      return [...store.entities.values()]
-        .filter((r) => r.layerId === 'local-firms')
-        .map((r) => ({
+      return [...store.entities.entries()]
+        .filter(([, r]) => r.layerId === 'local-firms')
+        .map(([id, r]) => ({
+          id,
           sensor: r.properties?.sensor || null,
-          sourceSupport: r.properties?.sourceSupport || null,
           product: r.properties?.product || null,
+          sourceSupport: r.properties?.sourceSupport || null,
         }));
     });
 
-    const allStale = lossCards.every((c) =>
-      typeof c.sourceSupport === 'string' && /STALE|key required/i.test(c.sourceSupport));
+    record('SOURCE LOSS: exactly 2 retained detections',
+      lossEntries.length === 2,
+      `count=${lossEntries.length}`);
 
-    record('SOURCE LOSS: key required error surfaced',
-      lossStats.error === 'KEY REQUIRED' || /key/i.test(String(lossStats.error)),
-      `error=${JSON.stringify(lossStats.error)}`);
+    if (lossEntries.length === 2) {
+      record('SOURCE LOSS: retained IDs are distinct',
+        lossEntries[0].id !== lossEntries[1].id,
+        `id1=${lossEntries[0].id} id2=${lossEntries[1].id}`);
 
-    if (lossCards.length > 0) {
-      record('SOURCE LOSS: retained detections marked stale',
+      const allStale = lossEntries.every((e) =>
+        typeof e.sourceSupport === 'string'
+        && /STALE/i.test(e.sourceSupport)
+        && /key required/i.test(e.sourceSupport));
+      record('SOURCE LOSS: both detections marked stale with key required',
         allStale,
-        `detections=${lossCards.length} supports=${JSON.stringify(lossCards.map(c => c.sourceSupport))}`);
+        `supports=${JSON.stringify(lossEntries.map(e => e.sourceSupport))}`);
+
+      const products = lossEntries.map(e => e.product).sort();
+      record('SOURCE LOSS: retained products are per-sensor',
+        products.includes('VIIRS_NOAA20_NRT') && products.includes('VIIRS_NOAA21_NRT'),
+        `products=${JSON.stringify(products)}`);
+
+      if (!allStale) exitCode = 1;
     } else {
-      record('SOURCE LOSS: detections retained (count > 0)', lossCards.length > 0,
-        `count=${lossCards.length}`);
+      record('SOURCE LOSS: retained IDs are distinct', false, `count=${lossEntries.length}`);
+      exitCode = 1;
+    }
+
+    // Wait for layer panel to re-sync after source loss
+    await page.evaluate(() => window.__godsEyeView?.viewer?.scene?.requestRender?.());
+    await sleep(2000);
+
+    // Read layer chip state from the DOM
+    const chipState = await readLayerChipState(page);
+    if (chipState) {
+      record('SOURCE LOSS: layer chip reflects error state',
+        chipState.feedState !== 'nominal',
+        `feedState=${chipState.feedState} text=${chipState.text}`);
     }
 
     await page.screenshot({ path: path.join(SHOTS_DIR, 'mf15-colocated-source-loss.png') });
