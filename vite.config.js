@@ -26,6 +26,7 @@
  */
 
 import fs from 'node:fs';
+import { researchAdmissionGate } from './server/providers/researchAdmission.js';
 import os from 'node:os';
 import { promises as fsp } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -7758,6 +7759,249 @@ function keySetupEndpoint() {
  * plugins, configures the dev server host/port, and exposes selected
  * API keys to the client as import.meta.env defines.
  */
+
+// ── God Eye First Ship proxies (Phase A) ────────────────────────────
+
+function portWatchProxy() {
+  const cache = new Map();
+  const CACHE_TTL_MS = 60 * 60 * 1000;
+
+  return {
+    name: 'portwatch-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/portwatch', async (req, res) => {
+        const url = new URL(req.url || '/', 'http://localhost');
+        const chokepoint = url.searchParams.get('chokepoint') || '';
+        const valid = ['hormuz', 'suez', 'bab', 'malacca', 'singapore', 'cape'];
+        if (!valid.includes(chokepoint)) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'invalid_chokepoint' }));
+          return;
+        }
+
+        const now = Date.now();
+        const cached = cache.get(chokepoint);
+        if (cached && now - cached.ts < CACHE_TTL_MS) {
+          res.writeHead(200, { 'Content-Type': 'application/json', 'X-GEV-Cache': 'HIT' });
+          res.end(JSON.stringify(cached.data));
+          return;
+        }
+
+        // PortWatch source admission pending (§4.2).
+        // Exact dataset schema, field mapping, and automated download permission
+        // require admission before integration ships. Return explicit unavailable.
+        const result = {
+          chokepoint,
+          observationDate: null,
+          transitCount: null,
+          avgTransitCount: null,
+          pctChange: null,
+          sourceRevision: null,
+          fetchedAt: new Date().toISOString(),
+          error: 'source_unavailable',
+          admissionStatus: 'pending',
+          admissionNote: 'IMF PortWatch source admission not yet completed. Exact dataset ID, region mapping, fields, and terms need admission per Joint Spec §4.2.',
+        };
+
+        cache.set(chokepoint, { ts: now, data: result });
+        res.writeHead(200, { 'Content-Type': 'application/json', 'X-GEV-Cache': 'ADMISSION-PENDING' });
+        res.end(JSON.stringify(result));
+      });
+    },
+  };
+}
+
+function gdacsProxy() {
+  let cache = null;
+  let cacheTs = 0;
+  const CACHE_TTL_MS = 60 * 60 * 1000;
+
+  return {
+    name: 'gdacs-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/gdacs', async (req, res) => {
+        const now = Date.now();
+        if (cache && now - cacheTs < CACHE_TTL_MS) {
+          res.writeHead(200, { 'Content-Type': 'application/json', 'X-GEV-Cache': 'HIT' });
+          res.end(cache);
+          return;
+        }
+
+        try {
+          const upstream = 'https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventlist=EQ,TC,FL,VO,WF,DR&alertlevel=Orange;Red';
+          const r = await fetch(upstream, {
+            signal: AbortSignal.timeout(20000),
+            headers: { Accept: 'application/json' },
+          });
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          const body = await r.text();
+          cache = body;
+          cacheTs = now;
+          res.writeHead(200, { 'Content-Type': 'application/json', 'X-GEV-Cache': 'MISS' });
+          res.end(body);
+        } catch (err) {
+          if (cache) {
+            res.writeHead(200, { 'Content-Type': 'application/json', 'X-GEV-Cache': 'STALE' });
+            res.end(cache);
+          } else {
+            res.writeHead(502, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'gdacs_fetch_failed', detail: err?.message }));
+          }
+        }
+      });
+    },
+  };
+}
+
+function emscProxy() {
+  let cache = null;
+  let cacheTs = 0;
+  const CACHE_TTL_MS = 15 * 60 * 1000;
+
+  return {
+    name: 'emsc-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/emsc', async (req, res) => {
+        const now = Date.now();
+        if (cache && now - cacheTs < CACHE_TTL_MS) {
+          res.writeHead(200, { 'Content-Type': 'application/json', 'X-GEV-Cache': 'HIT' });
+          res.end(cache);
+          return;
+        }
+
+        try {
+          const url = new URL(req.url || '/', 'http://localhost');
+          const minmag = url.searchParams.get('minmag') || '4';
+          const limit = url.searchParams.get('limit') || '100';
+          const upstream = `https://www.seismicportal.eu/fdsnws/event/1/query?format=json&limit=${encodeURIComponent(limit)}&minmag=${encodeURIComponent(minmag)}`;
+          const r = await fetch(upstream, { signal: AbortSignal.timeout(15000) });
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          const body = await r.text();
+          cache = body;
+          cacheTs = now;
+          res.writeHead(200, { 'Content-Type': 'application/json', 'X-GEV-Cache': 'MISS' });
+          res.end(body);
+        } catch (err) {
+          if (cache) {
+            res.writeHead(200, { 'Content-Type': 'application/json', 'X-GEV-Cache': 'STALE' });
+            res.end(cache);
+          } else {
+            res.writeHead(502, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'emsc_fetch_failed', detail: err?.message }));
+          }
+        }
+      });
+    },
+  };
+}
+
+function nwsAlertsProxy() {
+  let cache = null;
+  let cacheTs = 0;
+  const CACHE_TTL_MS = 5 * 60 * 1000;
+
+  return {
+    name: 'nws-alerts-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/nws-alerts', async (req, res) => {
+        const now = Date.now();
+        if (cache && now - cacheTs < CACHE_TTL_MS) {
+          res.writeHead(200, { 'Content-Type': 'application/json', 'X-GEV-Cache': 'HIT' });
+          res.end(cache);
+          return;
+        }
+
+        try {
+          const url = new URL(req.url || '/', 'http://localhost');
+          const area = url.searchParams.get('area') || 'TX,LA,MS,AL,FL';
+          const upstream = `https://api.weather.gov/alerts/active?area=${encodeURIComponent(area)}`;
+          const r = await fetch(upstream, {
+            signal: AbortSignal.timeout(15000),
+            headers: {
+              'User-Agent': 'GodEyeView/1.0 (osato.dev)',
+              Accept: 'application/geo+json',
+            },
+          });
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          const body = await r.text();
+          cache = body;
+          cacheTs = now;
+          res.writeHead(200, { 'Content-Type': 'application/json', 'X-GEV-Cache': 'MISS' });
+          res.end(body);
+        } catch (err) {
+          if (cache) {
+            res.writeHead(200, { 'Content-Type': 'application/json', 'X-GEV-Cache': 'STALE' });
+            res.end(cache);
+          } else {
+            res.writeHead(502, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'nws_fetch_failed', detail: err?.message }));
+          }
+        }
+      });
+    },
+  };
+}
+
+function marineWeatherProxy() {
+  const cache = new Map();
+  const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+
+  return {
+    name: 'marine-weather-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/marine-weather', async (req, res) => {
+        const url = new URL(req.url || '/', 'http://localhost');
+        const lat = parseFloat(url.searchParams.get('lat'));
+        const lon = parseFloat(url.searchParams.get('lon'));
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'invalid_coordinates' }));
+          return;
+        }
+
+        const key = `${lat.toFixed(2)},${lon.toFixed(2)}`;
+        const now = Date.now();
+        const cached = cache.get(key);
+        if (cached && now - cached.ts < CACHE_TTL_MS) {
+          res.writeHead(200, { 'Content-Type': 'application/json', 'X-GEV-Cache': 'HIT' });
+          res.end(JSON.stringify(cached.data));
+          return;
+        }
+
+        try {
+          const upstream = `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&current=wave_height,wave_period,wave_direction,swell_wave_height,swell_wave_period,ocean_temperature`;
+          const r = await fetch(upstream, { signal: AbortSignal.timeout(15000) });
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          const json = await r.json();
+          const current = json.current || {};
+          const result = {
+            waveHeight: current.wave_height ?? null,
+            wavePeriod: current.wave_period ?? null,
+            waveDirection: current.wave_direction ?? null,
+            swellHeight: current.swell_wave_height ?? null,
+            swellPeriod: current.swell_wave_period ?? null,
+            oceanTemp: current.ocean_temperature ?? null,
+            modelName: json.current_units ? 'Open-Meteo' : 'unknown',
+            modelInitTime: current.time || null,
+            receivedAt: new Date().toISOString(),
+          };
+          cache.set(key, { ts: now, data: result });
+          res.writeHead(200, { 'Content-Type': 'application/json', 'X-GEV-Cache': 'MISS' });
+          res.end(JSON.stringify(result));
+        } catch (err) {
+          if (cached) {
+            res.writeHead(200, { 'Content-Type': 'application/json', 'X-GEV-Cache': 'STALE' });
+            res.end(JSON.stringify(cached.data));
+          } else {
+            res.writeHead(502, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'marine_fetch_failed', detail: err?.message }));
+          }
+        }
+      });
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   // Load only this checkout's dotenv files. Shell/Keychain values still win,
   // and no sibling workspace is consulted implicitly.
@@ -7808,6 +8052,12 @@ export default defineConfig(({ mode }) => {
       openAiRealtimeProxy(),
       googlePlacesContextProxy(),
       keySetupEndpoint(),
+      portWatchProxy(),
+      researchAdmissionGate(),
+      gdacsProxy(),
+      emscProxy(),
+      nwsAlertsProxy(),
+      marineWeatherProxy(),
     ],
     server: {
       host: env.HOST || 'localhost',

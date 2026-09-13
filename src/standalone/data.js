@@ -12,6 +12,11 @@ import aisLiveVesselsLayer from '../data/aisLiveVessels.js';
 import militaryInstallationsLayer from '../data/militaryInstallations.js';
 import militaryAwarenessLayer from '../data/militaryAwareness.js';
 import localDataLayers from '../data/localLayers.js';
+import portWatchOverlay from '../data/portWatchOverlay.js';
+import gdacsAlerts from '../data/gdacsAlerts.js';
+import emscQuakes from '../data/emscQuakes.js';
+import nwsAlerts from '../data/nwsAlerts.js';
+import marineWeather from '../data/marineWeather.js';
 import { LAYER_STATE_REGISTRY } from '../data/layerState.js';
 
 /** Register the standalone layer catalog before allowing state restoration. */
@@ -49,6 +54,11 @@ export function createStandaloneData({
   for (const layer of localDataLayers) {
     dataManager.register(layer);
   }
+  dataManager.register(portWatchOverlay);
+  dataManager.register(gdacsAlerts);
+  dataManager.register(emscQuakes);
+  dataManager.register(nwsAlerts);
+  dataManager.register(marineWeather);
   // Restoration starts only after the complete production registry is sealed.
   dataManager.finalizeRegistrations(LAYER_STATE_REGISTRY);
   if (allowQaRegistration) {

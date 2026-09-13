@@ -286,6 +286,35 @@ test('a stale card id resolves to nothing instead of an arbitrary fire', () => {
   }
 });
 
+test('NRT feed preserves sensor duplicates, partial support and unknown receipt time', async (t) => {
+  const h = harness({ fires: [], withDataSource: true });
+  h.viewer.scene.primitives = { add(value) { return value; }, contains() { return false; } };
+  const detection = { lat: 30, lon: 50, frp: 12, confidence: 'n',
+    acqDate: '2026-09-12', acqTime: '0100', instrument: 'VIIRS' };
+  let payload = {
+    fetchedAt: 1789254000000,
+    sources: [{ ok: true }, { ok: true }, { ok: false }],
+    fires: [{ ...detection, satellite: 'N20' }, { ...detection, satellite: 'N21' }],
+  };
+  t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => payload }));
+  try {
+    await h.layer.update();
+    assert.equal(h.layer.getStats().count, 2, 'two detections, no unique-fire inference');
+    assert.match(h.layer.getStats().error, /PARTIAL.*1\/3.*NRT/);
+    assert.equal(h.layer.getStats().lastUpdate, payload.fetchedAt);
+    payload = { fires: [] };
+    await h.layer.update();
+    assert.equal(h.layer.getStats().lastUpdate, null, 'missing receipt is not current time');
+    assert.match(h.layer.getStats().error, /coverage unknown/);
+    payload = { fetchedAt: Date.now(), sources: [{ ok: true }] };
+    await h.layer.update();
+    assert.match(h.layer.getStats().error, /unavailable/);
+    assert.equal(h.layer.getStats().lastUpdate, null, 'malformed data does not refresh the clock');
+  } finally {
+    h.cleanup();
+  }
+});
+
 test('a refresh that drops the selected fire emits an eviction the readout can act on', async () => {
   // Behavioral, not a source pin: the tag was present and correct while the
   // event never fired, because the LOD rebuild deletes the selected context

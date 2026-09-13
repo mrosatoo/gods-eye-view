@@ -296,7 +296,7 @@ export function createFirmsHeatmapLayer({
      * Layer stats for the data panel. Degraded feed states surface through
      * `error` (established qa-failstate pattern: a dead feed must never look
      * like a healthy empty layer) with a matching human `loadingLabel`:
-     * 'LIVE · updated Xm ago' fresh, 'STALE · cached Xh' when the proxy
+     * 'NRT detections · fetched Xm ago', 'STALE · cached Xh' when the proxy
      * served past-TTL cache, 'KEY REQUIRED' keyless.
      */
     getStats() {
@@ -312,7 +312,7 @@ export function createFirmsHeatmapLayer({
       } else if (_error) {
         loadingLabel = _error;
       } else if (_lastUpdate) {
-        loadingLabel = `LIVE · updated ${formatAgoMinutes(now - _lastUpdate)}`;
+        loadingLabel = `NRT detections · fetched ${formatAgoMinutes(now - _lastUpdate)}`;
       }
       return {
         count: _count,
@@ -437,8 +437,15 @@ export function createFirmsHeatmapLayer({
       }
 
       const payload = await response.json();
+      if (!Array.isArray(payload?.fires)) throw new Error('Malformed FIRMS response');
       _keyRequired = false;
-      _error = null;
+      const sources = payload?.sources;
+      const failedSources = Array.isArray(sources) ? sources.filter(s => s?.ok !== true) : [];
+      _error = !Array.isArray(sources) || sources.length === 0
+        ? 'NRT detections · source coverage unknown'
+        : failedSources.length
+          ? `PARTIAL · ${failedSources.length}/${sources.length} VIIRS NRT sources unavailable`
+          : null;
       _stale = Boolean(payload?.stale);
       const previousSelection = _selectedFire;
       _selectedFire = null;
@@ -447,7 +454,7 @@ export function createFirmsHeatmapLayer({
       _firesByFrp = [..._fires].sort((a, b) => b.frp - a.frp);
       _count = _fires.length;
       // Data age, not response age: a stale proxy payload truthfully reads old.
-      _lastUpdate = Number.isFinite(payload?.fetchedAt) ? payload.fetchedAt : Date.now();
+      _lastUpdate = Number.isFinite(payload?.fetchedAt) ? payload.fetchedAt : null;
       // Settle the previous selection BEFORE the LOD rebuild. renderCurrentLod
       // runs refreshContextRegistrations(), which deletes every context record
       // not in the new top-N — including the one the store still points at.
@@ -465,7 +472,7 @@ export function createFirmsHeatmapLayer({
       if (reselected) selectFire(reselected);
     } catch (error) {
       console.warn(`[Data:${id}] FIRMS live load failed:`, error);
-      _error = 'live feed unavailable';
+      _error = 'NRT detection feed unavailable';
     } finally {
       _loading = false;
     }

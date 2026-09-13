@@ -45,6 +45,7 @@ import {
 } from './focusDeemphasis.js';
 import { requestWorldFocus } from '../worldFocus.js';
 import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor.js';
+import { evaluateLowSog, candidateLabel } from './aisStuckDetection.js';
 
 const FOCUS_EVIDENCE_DEV = import.meta.env?.DEV === true;
 
@@ -931,6 +932,7 @@ function applyAisFeedSnapshot(viewer, payload) {
 
   settleFirstConnectPhase('ready');
   reconcileVessels(viewer, snapshot.acceptedRows);
+  applyLowSogCandidates();
   state.count = state.vesselRecords.length;
   state.stale = Boolean(payload?.refreshing);
   state.newestPositionAt = payload?.newestPositionAt || null;
@@ -1039,6 +1041,23 @@ function reconcileVessels(viewer, rows) {
   state.vesselRecords = [...state.vesselMap.values(), ...state.unkeyedRecords];
   state.lastVisibilityUpdate = 0;
   updateVisibility(true);
+}
+
+function applyLowSogCandidates() {
+  const vessels = state.vesselRecords.map((r) => ({
+    mmsi: r.mmsi,
+    lat: r.lat,
+    lon: r.lon,
+    sog: r.speed,
+    navStatus: null,
+    sourceTimestamp: r.lastPositionUtc || null,
+    receiptTimestamp: null,
+  }));
+  const { candidates } = evaluateLowSog(vessels);
+  for (const record of state.vesselRecords) {
+    const info = candidates.get(String(record.mmsi));
+    record._lowSogCandidate = info || null;
+  }
 }
 
 /**
@@ -1785,14 +1804,16 @@ function updateSelectedVesselHud(record) {
   const el = document.getElementById('hud-ais-vessel');
   if (!el) return;
 
-  // Pinned vessels missing from recent refreshes get a stale marker
   const stale = (record.missedRefreshes || 0) > 0;
+  const candidateText = candidateLabel(record._lowSogCandidate);
   el.classList.add('active');
-  el.textContent = [
+  const lines = [
     `AIS: ${trimHudValue(record.name, 32)}`,
     `${trimHudValue(record.type || 'VESSEL', 24)}  SPD: ${formatSpeed(record.speed)}  HDG: ${formatHeading(record.heading ?? record.course)}`,
     `MMSI: ${record.mmsi || '--'}  ${formatPositionTime(record)}${stale ? '  · STALE' : ''}`,
-  ].join('\n');
+  ];
+  if (candidateText) lines.push(`⚓ ${candidateText}`);
+  el.textContent = lines.join('\n');
 }
 
 function resetSelectedVesselHud() {
@@ -1822,16 +1843,18 @@ export function buildVesselCard(record) {
   if (record.speed !== null && record.speed !== undefined) parts.push(formatSpeed(record.speed));
   const direction = record.heading ?? record.course;
   if (Number.isFinite(direction)) parts.push(`${Math.round(direction)}°`);
+  const candidateText = candidateLabel(record._lowSogCandidate);
+  if (candidateText) parts.push(`⚓ ${candidateText}`);
   return {
     id: vesselOverlayEntryId(record),
     actionable: Boolean(record?.mmsi),
     position: record.billboard?.position || record.position,
     gapPx: 10,
-    accent: accentForVesselType(record.type),
+    accent: record._lowSogCandidate?.candidateType ? '255, 145, 0' : accentForVesselType(record.type),
     title: trimHudValue(displayVesselName(record), 26),
     details: parts.length ? [parts.join(' · ')] : [],
     selected: false,
-    priority: labelPriority(record, null),
+    priority: record._lowSogCandidate?.candidateType ? labelPriority(record, null) + 500 : labelPriority(record, null),
   };
 }
 
@@ -1850,6 +1873,8 @@ export function buildSelectedVesselCard(record) {
     formatSpeed(record.speed),
     Number.isFinite(direction) ? `${Math.round(direction)}°` : '--°',
   ].join(' · ')];
+  const candidateText = candidateLabel(record._lowSogCandidate);
+  if (candidateText) details.push(`⚓ ${candidateText}`);
   const destination = String(record.destination || '').trim();
   if (destination) details.push(`→ ${trimHudValue(destination, 24)}`);
   const stale = (record.missedRefreshes || 0) > 0;
@@ -1859,7 +1884,7 @@ export function buildSelectedVesselCard(record) {
     actionable: Boolean(record?.mmsi),
     position: record.billboard?.position || record.position,
     gapPx: 12,
-    accent: accentForVesselType(record.type),
+    accent: record._lowSogCandidate?.candidateType ? '255, 145, 0' : accentForVesselType(record.type),
     title: trimHudValue(displayVesselName(record), 32),
     details,
     selected: true,

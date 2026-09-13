@@ -146,3 +146,64 @@ for (const preview of [false, true])
     assert.equal(hit.body, first.body);
     assert.equal(calls, 1);
   });
+
+for (const upstreamStatus of [403, 500]) {
+  test(`CelesTrak ${upstreamStatus} cooldown survives restart and blocks other groups`, async (t) => {
+    isolateDisk(t);
+    const disk = new Map();
+    t.mock.method(fsp, 'readFile', async (file) => {
+      if (!disk.has(file)) throw Error('no cache');
+      return disk.get(file);
+    });
+    t.mock.method(fsp, 'writeFile', async (file, body) => disk.set(file, body));
+    t.mock.method(console, 'warn', () => {});
+    let now = Date.now();
+    t.mock.method(Date, 'now', () => now);
+    let calls = 0;
+    t.mock.method(globalThis, 'fetch', async () => {
+      calls++;
+      return new Response('unavailable', { status: upstreamStatus });
+    });
+    const request = install(celestrakProxy());
+    assert.equal((await request('/api/celestrak', '/unknown-group')).status, 400);
+    assert.equal(calls, 0);
+    assert.equal((await request('/api/celestrak', '/stations')).status, 502);
+    for (let i = 0; i < 3; i++) {
+      const response = await request('/api/celestrak', '/visual');
+      assert.equal(response.status, 503);
+      assert.equal(response.headers['Retry-After'], '7200');
+    }
+    const restarted = install(celestrakProxy(), true);
+    assert.equal((await restarted('/api/celestrak', '/stations')).status, 503);
+    assert.equal(calls, 1);
+    now += 2 * 3600_000;
+    assert.equal((await restarted('/api/celestrak', '/stations')).status, 502);
+    assert.equal(calls, 2);
+  });
+}
+
+test('CelesTrak cooldown preserves aged last-good content and fetch clock', async (t) => {
+  isolateDisk(t);
+  t.mock.method(console, 'warn', () => {});
+  const now = Date.now();
+  t.mock.method(Date, 'now', () => now);
+  const at = now - 7 * 3600_000;
+  const body = 'ISS\n1 25544U fixture\n2 25544 fixture';
+  t.mock.method(fsp, 'readFile', async (file) => {
+    if (file.endsWith('celestrak-stations.json')) return JSON.stringify({ at, body });
+    throw Error('no cache');
+  });
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', async () => {
+    calls++;
+    throw Error('network failure');
+  });
+  const request = install(celestrakProxy());
+  const first = await request('/api/celestrak', '/stations');
+  const second = await request('/api/celestrak', '/stations');
+  assert.equal(first.headers['x-tle-cache'], 'STALE-ERROR');
+  assert.equal(second.headers['x-tle-cache'], 'STALE-COOLDOWN');
+  assert.equal(second.headers['x-tle-fetched-at'], new Date(at).toISOString());
+  assert.equal(second.body, body);
+  assert.equal(calls, 1);
+});

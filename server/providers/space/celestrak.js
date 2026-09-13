@@ -2,6 +2,11 @@ import path from 'node:path';
 import { promises as fsp } from 'node:fs';
 import { celestrakTleUrl } from '../../../src/data/spaceProviderRequests.js';
 
+const ALLOWED_GROUPS = new Set([
+  'stations', 'visual', 'gps-ops', 'glo-ops', 'galileo', 'geo', 'starlink', 'active',
+]);
+const FAILURE_COOLDOWN_MS = 2 * 3600_000;
+
 /**
  * Vite plugin: CelesTrak TLE proxy.
  *
@@ -25,6 +30,28 @@ export function celestrakProxy() {
   const CACHE_DIR = path.join(process.cwd(), '.gev-cache');
   const mem = new Map(); // group -> { at: epochMs, body: string }
   const inflight = new Map(); // group -> Promise<{at, body}|null>
+  // Provider-wide cooldown: changing groups must not bypass a failed refresh.
+  // Persist separately so a restart does not immediately retry the provider.
+  const cooldownPath = path.join(CACHE_DIR, 'celestrak-cooldown.json');
+  let retryAt = 0;
+  let cooldownLoaded;
+
+  function loadCooldown() {
+    return cooldownLoaded ||= fsp.readFile(cooldownPath, 'utf8').then((body) => {
+      const saved = JSON.parse(body);
+      if (Number.isFinite(saved.retryAt)) retryAt = Math.max(retryAt, saved.retryAt);
+    }).catch(() => {});
+  }
+
+  async function recordFailure() {
+    retryAt = Math.max(retryAt, Date.now() + FAILURE_COOLDOWN_MS);
+    try {
+      await fsp.mkdir(CACHE_DIR, { recursive: true });
+      await fsp.writeFile(cooldownPath, JSON.stringify({ retryAt }), 'utf8');
+    } catch {
+      console.warn('[celestrak-proxy] cooldown persistence failed; memory protection only');
+    }
+  }
 
   const diskPath = (group) => path.join(CACHE_DIR, `celestrak-${group}.json`);
 
@@ -52,8 +79,7 @@ export function celestrakProxy() {
     const url = celestrakTleUrl(group);
     const res = await fetch(url.toString(), {
       signal: AbortSignal.timeout(20000),
-      // CelesTrak 403s bulk groups (e.g. `active`) unless the request carries a
-      // descriptive User-Agent with a contact point.
+      // Identify the client; this does not establish or resolve a 403's cause.
       headers: {
         'User-Agent':
           'gods-eye-view-celestrak-proxy/1.0 (+https://github.com/bilawalsidhu/gods-eye-view)',
@@ -71,12 +97,12 @@ export function celestrakProxy() {
       const group = String(req.url || '')
         .replace(/^\//, '')
         .split('?')[0];
-      if (!/^[a-z0-9-]+$/i.test(group)) {
+      if (!ALLOWED_GROUPS.has(group)) {
         res.writeHead(400, { 'Content-Type': 'text/plain' });
         res.end('invalid group');
         return;
       }
-      const send = (status, body, cacheStatus) => {
+      const send = (status, body, cacheStatus, entry = null) => {
         // Guard against a double-send (e.g. a throw AFTER a response already
         // went out routing into the catch's send): writeHead after headersSent
         // throws "Cannot set headers after they are sent".
@@ -84,10 +110,17 @@ export function celestrakProxy() {
         res.writeHead(status, {
           'Content-Type': 'text/plain',
           'x-tle-cache': cacheStatus,
+          'x-tle-format': 'tle-limited-selected-catalogs',
+          'x-tle-fetched-at': entry ? new Date(entry.at).toISOString() : 'unknown',
+          'Cache-Control': 'no-store',
+          ...(retryAt > Date.now() ? {
+            'Retry-After': String(Math.ceil((retryAt - Date.now()) / 1000)),
+          } : {}),
         });
         res.end(body);
       };
       try {
+        await loadCooldown();
         const now = Date.now();
         let entry = mem.get(group);
         if (!entry) {
@@ -95,7 +128,12 @@ export function celestrakProxy() {
           if (entry) mem.set(group, entry);
         }
         if (entry && now - entry.at < TLE_TTL_MS) {
-          send(200, entry.body, 'HIT');
+          send(200, entry.body, 'HIT', entry);
+          return;
+        }
+        if (now < retryAt) {
+          send(entry ? 200 : 503, entry?.body || 'CelesTrak unavailable during failure cooldown',
+            entry ? 'STALE-COOLDOWN' : 'COOLDOWN', entry);
           return;
         }
         // Stale or missing → refresh, single-flight per group.
@@ -108,7 +146,8 @@ export function celestrakProxy() {
                 await writeDisk(group, fresh);
                 return fresh;
               })
-              .catch((err) => {
+              .catch(async (err) => {
+                await recordFailure();
                 console.warn(
                   '[celestrak-proxy] refresh failed — serving cache if any',
                 );
@@ -119,9 +158,9 @@ export function celestrakProxy() {
         }
         const fresh = await inflight.get(group);
         if (fresh) {
-          send(200, fresh.body, 'MISS');
+          send(200, fresh.body, 'MISS', fresh);
         } else if (entry) {
-          send(200, entry.body, 'STALE-ERROR'); // upstream down — stale beats empty
+          send(200, entry.body, 'STALE-ERROR', entry); // preserve original TLE epoch
         } else {
           send(502, 'celestrak fetch failed and no cache available', 'NONE');
         }

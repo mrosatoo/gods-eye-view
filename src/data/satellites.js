@@ -814,7 +814,7 @@ function _contextSubjectMetadata(noradId, position = null) {
     id: String(noradId),
     layerId: 'satellites',
     layerName: 'Satellites',
-    source: 'CelesTrak',
+    source: 'CelesTrak · propagated · TLE-limited subset',
     label: name,
     latitude: pos.latitude,
     longitude: pos.longitude,
@@ -1519,7 +1519,7 @@ const satellitesLayer = {
   id: 'satellites',
   name: 'Satellites',
   icon: '🛰️',
-  source: 'CelesTrak',
+  source: 'CelesTrak · propagated · TLE-limited subset',
   updateInterval: 0, // We use preRender for real-time updates, not interval polling
   refreshInterval: 5 * 60 * 1000, // Catalog data refresh; propagation remains preRender-owned.
 
@@ -1636,7 +1636,8 @@ const satellitesLayer = {
           if (!res.ok) return { ...groupDef, entries: [], ok: false };
           const entries = parseTLE(await res.text());
           updateSignal.throwIfAborted();
-          return { ...groupDef, entries, ok: entries.length > 0 };
+          const stale = String(res.headers?.get?.('x-tle-cache') || '').startsWith('STALE');
+          return { ...groupDef, entries, ok: entries.length > 0, stale };
         } catch (error) {
           if (updateSignal.aborted || error?.name === 'AbortError') throw error;
           return { ...groupDef, entries: [], ok: false };
@@ -1664,9 +1665,11 @@ const satellitesLayer = {
       // At least one group loaded — proceed with a fresh rebuild, but keep the
       // partial outage visible at the layer control instead of presenting the
       // reduced catalog as a fully healthy refresh.
-      _lastError = failed.length
-        ? `${failed.length} CelesTrak group${failed.length === 1 ? '' : 's'} unavailable`
-        : null;
+      const staleGroups = results.filter(r => r.stale).length;
+      _lastError = [
+        failed.length ? `${failed.length} CelesTrak group${failed.length === 1 ? '' : 's'} unavailable` : '',
+        staleGroups ? `${staleGroups} group${staleGroups === 1 ? '' : 's'} using stale TLEs` : '',
+      ].filter(Boolean).join(' · ') || null;
 
       // Clear existing
       _pointCollection.removeAll();
@@ -2145,10 +2148,10 @@ const satellitesLayer = {
     const loading = _denseStatus === 'loading';
     const failed = _denseStatus === 'failed';
     const active = _params.catalog === 'dense' && _denseStatus === 'ready';
-    let title = 'Add the full Starlink broadband shell (thousands of extra points)';
+    let title = 'Add available Starlink TLE catalog points (coverage may be incomplete)';
     if (loading) title = 'Loading the Starlink shell…';
     else if (failed) title = `Starlink ${_denseError || 'load failed'} — click to retry`;
-    else if (active) title = 'Showing the full Starlink shell — click for the core catalog only';
+    else if (active) title = 'Showing available Starlink TLE points — click for the core catalog only';
     return {
       chips: [{
         id: 'catalog',

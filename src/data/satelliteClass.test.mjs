@@ -412,6 +412,24 @@ test('a real stations-feed outage keeps STATION in the legend, matching the card
   }
 });
 
+test('cached stale TLEs remain renderable but surface a degraded source warning', async (t) => {
+  t.mock.method(console, 'log', () => {});
+  _setDenseCatalogStateForTest({});
+  t.mock.method(globalThis, 'fetch', async () => ({
+    ok: true,
+    headers: new Headers({ 'x-tle-cache': 'STALE-COOLDOWN' }),
+    text: async () => ISS_TLE,
+  }));
+  try {
+    await satellitesLayer.update({ scene: { primitives: { add: p => p, remove() {} } } });
+    assert.equal(satellitesLayer.getStats().status, 'degraded');
+    assert.match(satellitesLayer.getStats().error, /6 groups using stale TLEs/);
+    assert.equal(_catalogGroupForTest(25544), 'stations');
+  } finally {
+    _clearDenseCatalogStateForTest();
+  }
+});
+
 test('a catalog rebuild refreshes the detection overlay class strings', async () => {
   // The overlay caches one record per satellite and stamps id/class at
   // creation. A rebuild can re-tag a satellite (whichever group survives an
