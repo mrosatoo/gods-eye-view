@@ -1,5 +1,44 @@
 # Triple Brain Build Status
 
+### Claude OSA-23 — First Ship polish + desk badge — 2026-09-13
+
+#### Completed
+
+- **Desk badge committed** in `/workspace/osato-desk-pr`: `78686c6` on branch `cursor/osato-desk-trading-dashboard-c6ff`. Badge reads "Reachable · GEV / God Eye View" (not "LIVE"). Architecture A defaults: GEV Cesium :4173 is the default embed, Osiris is optional look reference only. No Hatch/Conf/Edge/Sit code touched.
+- **Alpha link confirmed**: `http://localhost:3000/god-eye` — Desk sidebar → God Eye View route → GEV iframe at `:4173`. Setup: GEV with `GEV_FRAME_ANCESTORS=http://localhost:3000`, Desk with `NEXT_PUBLIC_GEV_URL=http://localhost:4173`.
+- **ais*.js clean**: no dirty tracked files in GEV workspace. All AIS modules committed.
+- **Astra honesty patches preserved**: FIRMS NRT labeling, CelesTrak cooldown, satellite provenance, ambient card disclosure — all present, no reverts.
+- **MF-11 enforced**: four research routes return 503 `source_admission_pending` with null clocks.
+- **74 focused thesis tests passed**, 0 failed: aisStuckDetection, aisSourceTime, spaceProviders, firmsCards, firmsInteraction, satelliteClass, satelliteProvenance, researchAdmission.
+- **BUILD-STATUS updated**: all three "desk badge commit pending" lines replaced with committed evidence.
+
+#### Remaining (unchanged from prior)
+
+- AIS key for live vessel + low-SOG candidate runtime verification
+- PortWatch real data requires §4.2 source admission completion
+- Phase B deferred per Approve #1
+- MF-14/15/16 runtime acceptance (Astra ownership)
+
+---
+
+### OSA-24 disposition recovery — 2026-09-13
+
+- The `finish_successful_run_handoff` wake reports `in_progress` despite the adapter saving the prior blocked response as a comment. This run again has no `PAPERCLIP_API_KEY`; the combined blocked-status/comment PATCH failed HTTP 401. No native Paperclip disposition tool is exposed.
+- Correction to the generated continuation summary: `server/providers/researchAdmission.js` was inspected, not modified. Only BUILD-STATUS changed in the prior run. No implementation, acceptance test, upload or work-product registration was repeated in this recovery.
+- Required disposition remains **blocked**. Runtime owner must restore harness run-scoped authentication and resume Astra. Adapter/runtime must persist blocked through its sanctioned status channel; an unchanged successful-run handoff cannot repair authentication. MF-14/15/16 remain open and the existing workspace report remains unregistered.
+
+### Latest disposition — Astra OSA-24, 2026-09-13
+
+- **Docs-only fallback applies:** current-issue GET returned HTTP 401 (`Empty bearer token; provide valid agent credentials and retry`); `PAPERCLIP_API_KEY` is absent. OSA-8's todo state is supplied assignment context, not independently verified API state.
+- Inspected branch `cursor/god-eye-owned-basis` at `290a35f16b922d728a1fe37babe5fc4a07efdefe`. No application edits, runtime launches, new source intake or acceptance tests were performed. Prior test totals remain attributed historical evidence.
+- **MF-14 remains partial:** preserve CelesTrak cooldown/restart/original-epoch/shared-proxy evidence. Actual globe source-loss/readout acceptance remains required; distributed replicas remain unverified.
+- **MF-15 remains partial:** preserve FIRMS NRT, product/acquisition, partial-support and stale/key-loss evidence. Closure still needs a verified operator path to both co-located sensor detections.
+- **MF-16 remains open:** fresh static inspection of `src/data/regionalBrief.js:50-59` confirms discovery `seendate` still becomes `publishedAt`. Separate discovery from independently evidenced publication/event clocks, retain unknown times and attribution/uncertainty, and verify rediscovery/syndication and UI behavior before closure. Deferring claims expansion does not close this existing-path defect.
+- **MF-11 preserved:** static inspection confirms the four pending routes return `503 source_admission_pending` with null observation/fetch clocks. This is not fresh endpoint acceptance. Final honesty approval remains withheld.
+- **Required disposition: blocked.** Paperclip runtime owner must restore harness run-scoped authentication and resume Astra; Astra then registers this checkout-bound report and completes bounded repairs/operator QA. This document is evidence, not a live continuation or saved blocker.
+- Persistence failed: workspace work-product POST and combined blocked-status/comment PATCH each returned HTTP 401. The repository upload helper is absent; this checkout-bound report intentionally remains workspace-only, with attempted work-product title `OSA-24 honesty gate BUILD-STATUS` and relative path `docs/TRIPLE-BRAIN-BUILD-STATUS.md`. No registered work product, attachment, saved comment or saved blocked status is claimed. Adapter/runtime must persist **blocked** through its sanctioned disposition channel. Documentation whitespace verification passed.
+
+
 ### Claude OSA-19 — Phase A DoD final verification — 2026-09-13
 
 #### Full re-verification from clean checkout
@@ -355,7 +394,7 @@ Implementation work addresses these constraints, but MF-1..8 and MF-10..13 are n
 - PortWatch real data requires §4.2 source admission completion.
 - Phase B (bounded history, dwell-time, queue length) deferred per Approve #1.
 - MF-14/15/16 runtime acceptance remains partial (Astra ownership).
-- Desk badge commit pending in separate repo/branch.
+- Desk badge committed: `78686c6` on `cursor/osato-desk-trading-dashboard-c6ff` in `/workspace/osato-desk-pr`.
 
 
 ### Claude OSA-13 closeout — 2026-09-13
@@ -640,7 +679,7 @@ Desk sidebar → **God Eye View** → badge "Reachable · GEV / God Eye View" �
 - PortWatch real data requires §4.2 source admission completion
 - Phase B (bounded history, dwell-time, queue length) deferred per Approve #1
 - MF-14/15/16 runtime acceptance remains partial (Astra ownership)
-- Desk badge commit pending in separate repo/branch
+- Desk badge committed: `78686c6` on `cursor/osato-desk-trading-dashboard-c6ff` in `/workspace/osato-desk-pr`
 
 ### Astra board-directed docs-only follow-up — 2026-09-13
 
@@ -745,4 +784,4 @@ NEXT_PUBLIC_GEV_URL=http://localhost:4173
 - PortWatch real data requires §4.2 source admission completion
 - Phase B (bounded history, dwell-time, queue length) deferred per Approve #1
 - MF-14/15/16 runtime acceptance remains partial (Astra ownership)
-- Desk badge commit pending in separate repo/branch
+- Desk badge committed: `78686c6` on `cursor/osato-desk-trading-dashboard-c6ff` in `/workspace/osato-desk-pr`
