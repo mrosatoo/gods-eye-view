@@ -154,16 +154,44 @@ Implementation work addresses these constraints, but MF-1..8 and MF-10..13 are n
 - **Desk reachability badge.** Changed from "LIVE · GEV / God Eye View" to "Reachable · GEV / God Eye View" in `/workspace/osato-desk-pr/src/components/god-eye/GodEyeClient.tsx`. No Hatch/Conf/Edge code was touched.
 - **Candidate label wording.** Single-vessel label says "Low SOG candidate" (not "Dwell candidate"). Anchor status says "Reported at anchor". Cluster label says "N low-SOG candidates".
 
+#### A1–A16 acceptance matrix
+
+| ID | Adversarial scenario | Implementation evidence | Status |
+|----|---------------------|------------------------|--------|
+| A1 | Missing/future source timestamp; old cache | `evaluateLowSog()` rejects unknown/future/stale (>5 min) source timestamps; `ais-store.js` returns null for unparseable timestamps; tests: `aisStuckDetection.test.mjs`, `aisSourceTime.test.mjs` | ✅ Code |
+| A2 | Global AIS healthy, region silent | HUD shows "AIS: --" when no data; feed health chip shows degraded states; regional evidence empty = no candidate claims; position time shows "TIME UNKNOWN" | ✅ Code |
+| A3 | Zero/missing/sentinel speed; threshold | `isValidSpeed()` excludes null/undefined/negative/sentinel (511, 102.3); SOG < 0.5 kn threshold; NaN/string speed excluded; tests pass | ✅ Code |
+| A4 | One report, duplicates, gap, restart | Phase A suppresses duration entirely — no temporal claims, no "waiting X minutes". Level 1 ceiling. | ✅ Spec |
+| A5 | Pan/zoom, row cap, overlap | Fixed chokepoint bounding boxes (`CHOKEPOINT_BOUNDING_BOXES`), not viewport-dependent; `globallyTruncated` flag propagated to cluster labels | ✅ Code |
+| A6 | PortWatch missing vs zero; revised day | Proxy returns explicit `source_unavailable` with null observation/fetch clocks; no synthetic data; neutral fill colors; dated labels | ✅ Code |
+| A7 | Duplicate headline, vague location | Claims UI deferred; no automatic correlation/confirmation logic; research routes gated 503 | ✅ Deferred |
+| A8 | Cobalt + imagery on/off | `REGION_TYPES` in `thesisDefaults.js` distinguishes maritime vs land; no truck/water metrics exist | ✅ Code |
+| A9 | Small screen, no hover, keyboard | Text labels accompany all amber/candidate colors; thesis chip visible at 1366×768; source ages in card text, not tooltip-only | ✅ Code |
+| A10 | Actual Desk entry, source loss | Desk embeds GEV iframe with `allow="fullscreen"` only; badge says "Reachable" not "LIVE"; no Hatch/Conf/Edge/Voice/RECON path exists; isolation chip enforced | ✅ Code |
+| A14 | Repeated errors after 403/500 | CelesTrak two-hour cooldown with disk persistence; tests cover 403/500/restart; stale data retains original epochs | ✅ Tests |
+| A15 | Two sensors, one source fails | FIRMS NRT detection labeling; partial support exposed; acquisition times preserved; tests cover two-sensor + partial failure | ✅ Tests |
+| A16 | Three copies of one article | Claims UI deferred; no GDELT integration active; research route gated 503 `source_admission_pending` | ✅ Deferred |
+
 #### Verification
 
-- **135 focused tests passed, 0 failed**: AIS source-clock, low-SOG eligibility, vessel cards/feed state, analyst mapping, CelesTrak cooldown/restart, FIRMS interaction/cards, satellite class, space providers.
-- **GEV `npx vite build`**: succeeded, 0 errors.
-- **Desk TypeScript check**: passed.
+- **200 focused tests passed, 0 failed**: AIS source-clock (1), low-SOG eligibility (3), vessel cards/feed state (73), layer state/manager (50), CelesTrak cooldown/restart, FIRMS interaction/cards, satellite class/provenance, space providers.
+- **GEV `npx vite build`**: succeeded, 246 modules, 0 errors.
+- **Desk `next build`**: succeeded, `/god-eye` route compiled.
 - **No secrets committed.** No `.env` files, no API keys in source.
 
-#### Remaining (not blocking DoD)
+#### Remaining (not blocking Phase A DoD)
 
 - AIS key needed for live vessel + low-SOG candidate runtime verification (no key in current env).
 - PortWatch real data requires §4.2 source admission completion.
 - Phase B (bounded history, dwell-time, queue length) deferred per Approve #1.
-- Full MF-14/15/16 runtime acceptance remains partial.
+- Full MF-14/15/16 runtime acceptance remains partial (Astra ownership).
+
+### Astra MF-14/15 remainder — 2026-09-13 (OSA-10)
+
+- **Implemented:** tracked satellite card and shared context now disclose original TLE element epoch and increasing age next to PROPAGATED. Missing/future epochs are explicit. Named numeric five-column TLE inputs only: expanded numeric IDs, Alpha-5, mismatched line IDs and JSON/OMM are excluded rather than truncated or treated as complete coverage. Source remains a TLE-limited selected-catalog subset.
+- **Implemented:** FIRMS selected, ambient and aggregate cards use NRT DETECTION(S), not FIRE(S). Individual cards identify acquisition age, including unknown/future acquisition; selected cards retain exact upstream product where available and show partial/unknown/stale source support. Existing caches without product retain the generic VIIRS NRT label. Shared context also says detection and preserves product/support. Failed refresh marks retained cards stale/unavailable. The adapter no longer fabricates midnight when acquisition time is missing.
+- **Verified:** 75 focused tests passed, 0 failed: satelliteProvenance, satellitesTrackedRefresh, firmsCards, firmsInteraction, firmsAdapt, firmsCsv, firmsProxy, spaceProviders and researchAdmission. This includes original epoch aging, unsupported-ID rejection, production tracked-card model, two sensors over one hotspot with six-hour acquisition age and one failed source, exact product retention, 403/500 restart cooldown and 20 clients sharing one failed refresh. MF-11 dev/preview admission suppression remains intact; no research source admitted. Diff whitespace checks passed.
+- **Limits:** these are model/middleware tests, not browser screenshot acceptance. MF-14 deployment verification covers clients sharing one serving proxy, not independent server processes or distributed replicas. Browser readability for the added provenance rows and final A14/A15 operator acceptance remain unverified. No full Phase A or final honesty-gate approval is claimed.
+- **Control-plane disposition:** blocked on authenticated run access. This run has no PAPERCLIP_API_KEY and issue heartbeat-context returned HTTP 401. Per the task's explicit fallback, status is recorded only here; no issue comment/status/work-product write is claimed. Runtime owner must restore run-scoped authentication; Astra then registers the workspace code/report work products and completes browser acceptance/QA coordination. This is a requested blocked disposition for adapter recovery, not a confirmed Paperclip status.
+- Workspace code handoff: src/data/satelliteProvenance.js, src/data/satellites.js, src/data/firmsAdapt.js, src/data/firmsHeatmap.js, server/providers/firms.js and their focused tests. The shared index was staged by another actor during this run; Astra did not stage, commit or push those changes.
+- Artifact publication attempted with the installed Paperclip upload helper (the repo-local `skills/paperclip/scripts/paperclip-upload-artifact.sh` is absent). It failed before upload because required authentication is missing. No attachment or artifact work product exists for this run; restore authenticated access before claiming a board-accessible handoff.
