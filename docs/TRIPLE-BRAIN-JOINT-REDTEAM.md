@@ -241,3 +241,21 @@ Reviewed Joint Spec Rev 2, SHA-256 `e2ecf712bd4f3f9532ba693ef6f628de3b78fab24082
 Verification details and integration gaps are recorded in `TRIPLE-BRAIN-BUILD-STATUS.md`. No new source license or live-data availability verdict was inferred in this pass.
 
 MF-11 implementation update: `researchAdmissionGate()` now prevents the four conditional research proxies from contacting upstream in dev/preview until admission is evidenced. Two admission tests pass and all four local endpoints returned `503 source_admission_pending`. This resolves unsafe automatic admission for these routes by suppression, not by granting source rights. Later integration must preserve this gate until the missing admission evidence is reviewed.
+
+
+## 7. Board-directed workspace honesty gate — 2026-09-13
+
+Reviewed checkout `fd4bc544746b875cd55631cba8246c325a45be5b`; input Joint Spec SHA-256 `32c78d889e10cb6f764a0d378317a18e7b6380af96e7fe917fc2d1cb0bdb1351` before this pass's notice. The board asked Astra to continue in workspace docs if JWT injection remained missing and prohibited a solo soft-build by Grok. No new build, deployment, admission or product acceptance is authorized by this review.
+
+**Disposition: changes required / acceptance open.** This is distinct from the existing Approve #1 implementation authorization.
+
+| Gate | Current evidence | Required closure / responsible role |
+|---|---|---|
+| MF-4 unique population | Executed deterministic fixture: five copies of the same fresh low-SOG MMSI in Hormuz produce one candidate and a cluster with `count: 1`, despite `CLUSTER_MIN_VESSELS = 5`. Group-size qualification occurs before unique MMSI counting. This proves a pure-evaluator defect, not that production currently supplies duplicates or renders this cluster. | Claude implementation: deduplicate by MMSI before clustering, define conflicting/out-of-order selection, and test four versus five unique vessels plus overlapping zones. Astra reviews evidence. |
+| MF-11 source admission | `researchAdmissionGate()` remains before `gdacsProxy()` in Vite. Four research routes explicitly return unavailable. Spec B.1b still says sources were verified/admitted and its rows say ADMIT P2. Those statements are not sufficient terms/schema/fixture/export evidence. | Joint spec owner reconciles admission tables with the gate. Astra must review intended-use evidence before any gate removal; keyless access alone never closes this finding. |
+| MF-8/9 product acceptance | Latest build-status section calls A1–A16 addressed and labels remaining runtime acceptance nonblocking, but also records partial MF-14/15/16 runtime acceptance. Earlier HTTP checks and isolated renderer fixtures do not establish the full normal/degraded Desk click path. | Claude/QA supply dated end-to-end evidence for actual Desk/GEV runtime, regional silence, source loss, stale recovery and restart; Astra assesses remaining gates. Previously reported Desk wording fix is recorded, not reverified here. |
+| MF-1/2/3 source-time and wording | Prior 81-test evidence remains recorded; source-age evaluator and null-clock behavior remain present. This pass did not rerun that suite. | Preserve fixes. Still prove out-of-order behavior and adjacent age/missingness on actual cards; no temporal dwell claim from a single observation. |
+
+The spec now carries an explicit gate notice to prevent prior completion/admission statements from being mistaken for final acceptance. No other author's historical evidence has been deleted. New sources remain suppressed, and deferred claims remain deferred. Tests passed for a narrower seam do not waive the remaining mandatory acceptance criteria.
+
+Coordination: this run still lacks `PAPERCLIP_API_KEY`. Runtime owner must restore run-bound authentication; Astra then publishes these files and creates the bounded Claude/QA follow-ups with first-class dependencies. Those follow-ups are named here but are not claimed to be scheduled. Workspace documentation is the board-authorized fallback, not a live continuation path.

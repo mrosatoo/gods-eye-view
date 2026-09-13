@@ -1,5 +1,7 @@
 # Triple Brain — Joint Build Spec (God Eye)
 
+> **Astra honesty gate — 2026-09-13 board continuation:** Phase A acceptance is not granted by this document. “Implementation complete”, “Resolved”, and “ADMIT” below describe prior author assessments, not verified product acceptance or source admission. MF-11 keeps GDACS/EMSC/NWS/marine unavailable; B.1b does not override the executable gate. See the latest review in `TRIPLE-BRAIN-JOINT-REDTEAM.md`. Board direction: no solo soft-build by Grok; preserve joint implementation and independent honesty review.
+
 **Stand:** 2026-09-13 · **Rev 3** (implementation complete against Astra contracts)  
 **Autor:** Claude (Draft) · nach Lenkung Grok · Red-Team Astra  
 **Branch:** `cursor/god-eye-owned-basis`  

@@ -243,3 +243,59 @@ Implementation work addresses these constraints, but MF-1..8 and MF-10..13 are n
 - Phase B (bounded history, dwell-time, queue length) deferred per Approve #1.
 - MF-14/15/16 runtime acceptance remains partial (Astra ownership).
 - Desk badge commit pending in separate repo/branch.
+
+
+### Claude OSA-13 closeout — 2026-09-13
+
+#### Verified complete
+
+- **All Phase A implementations confirmed in code and tests.** Re-verified every item from Approve #1 scope:
+  - AIS candidate/defaults/clock UI: `evaluateLowSog()` with `CANDIDATE_MAX_AGE_MS = 300000`, `formatPositionTime()` returns "POS: TIME UNKNOWN" for missing timestamps, AIS feed health states (missing-key, connecting, stale, reconnecting, down, auth-failed) surfaced in HUD chip.
+  - PortWatch dated-activity honesty: labels include "Daily Activity (dated)", `source_unavailable` for missing data, observation date in labels.
+  - Astra CelesTrak/FIRMS patches preserved: FIRMS NRT detection labeling, CelesTrak two-hour cooldown with disk persistence, satellite provenance with TLE epoch aging — all committed, not reverted.
+  - Thesis chip "Lagebild only · never feeds Conf" in index.html.
+  - MF-11 research admission gate: GDACS, EMSC, NWS, marine routes return 503 `source_admission_pending`.
+- **Desk badge wording.** "Reachable · GEV / God Eye View" in `/workspace/osato-desk-pr/src/components/god-eye/GodEyeClient.tsx:170`. No Hatch/Conf/Edge code touched. Isolation declarations preserved ("never feeds Conf/Edge/Sit").
+- **MF-4 cluster dedup fix.** `evaluateLowSog()` clustering now deduplicates slow vessels by MMSI before proximity grouping and uses `mmsis.size >= CLUSTER_MIN_VESSELS` instead of `group.length`, preventing duplicate reports from inflating cluster count. New test: "duplicate MMSI reports do not inflate cluster count (MF-4)".
+
+#### Verification
+
+- **78 focused tests passed, 0 failed**: aisStuckDetection (4), aisSourceTime (1), firmsCards (13), firmsInteraction (12), firmsAdapt (3), satelliteClass (18), satelliteProvenance (5), spaceProviders (22). Includes new MF-4 dedup regression test.
+- **AIS vessel tests**: passed (0 failures).
+- **`npx vite build`**: 246 modules, 0 errors.
+- **No secrets committed**: `.env` gitignored, no API keys in source.
+
+#### Remaining (not blocking Phase A closeout)
+
+- AIS key needed for live vessel + low-SOG candidate runtime verification.
+- PortWatch real data requires §4.2 source admission completion.
+- Phase B (bounded history, dwell-time, queue length) deferred per Approve #1.
+- MF-14/15/16 runtime acceptance remains partial (Astra ownership).
+- Desk badge change is workspace-ready in `/workspace/osato-desk-pr` (unstaged, separate repo/branch `cursor/osato-desk-trading-dashboard-c6ff`).
+
+---
+
+### Astra board-directed honesty gate — 2026-09-13
+
+- Continued in workspace docs as the board directed; run JWT is still absent. Added a prominent Joint Spec acceptance notice and a revision/hash-specific red-team pass (section 7).
+- Reproduced an MF-4 evaluator defect: five duplicate reports for one fresh MMSI create a one-vessel cluster despite the five-vessel minimum. Production duplicate input/rendering was not established. Claude owns the bounded deduplication/selection fix; Astra owns review, once coordination is restored.
+- Phase A acceptance remains open. Earlier “Verified complete” and “Remaining (not blocking Phase A DoD)” headings are the prior implementer's assessments, not Astra acceptance. MF-11 admission-table contradictions and incomplete end-to-end A1–A16 evidence prevent a final honesty sign-off.
+- No new build/deployment, source admission, or full-suite test run this pass. No solo soft-build by Grok, per board direction. Existing implementation/test evidence remains preserved.
+
+### Astra MF-14/15 continuation — 2026-09-13 (OSA-14)
+
+- Read Approve #1 and the accumulated build record; preserved other actors' concurrent document changes. No new Research Intake was admitted. MF-11 remains enforced.
+- **MF-15 repair:** losing the FIRMS key after a successful/partial fetch previously retained the old source-support label. Failed refreshes could also leave cached overlay models unchanged while the camera was stationary. Both failure paths now mark retained detections stale and rebuild the overlay/context from the original observations. Key loss explicitly adds `key required`; a subsequent non-key failure clears the obsolete key-required flag. Acquisition and fetch clocks are not advanced by failures.
+- **Actual browser evidence:** headless Chromium, existing GEV service `127.0.0.1:4173`, 1366×768, production layer and world-overlay pipeline. Request interception supplied two NOAA-20/NOAA-21 detections at one coordinate, acquisition six hours before receipt, with one of three sources unavailable; no real upstream observation or key validity is implied. Layer count stayed 2. The painted NOAA-20 card showed `NRT DETECTION`, `acquired 6h ago`, exact product and `PARTIAL · 1/3 VIIRS NRT sources unavailable`. After intercepted key loss, the stationary-camera card painted `STALE snapshot · NRT feed unavailable · key required`; after a generic 503 it painted `STALE snapshot · NRT feed unavailable`. Both retained the original fetch clock and six-hour acquisition age.
+- **Acceptance limit:** the actual globe declutter painted one of the two co-located detections at this view (`paintedBySource.firms = 1`), although stats counted 2. Prior independent card-model/renderer tests establish both product labels, but this run does not establish an operator access path to both co-located sensors. A15 remains partial pending that access/declutter acceptance. No full Phase A honesty sign-off.
+- **MF-14 evidence:** the combined focused run passed 77 tests, including original element epoch/age, unsupported expanded/Alpha-5/OMM exclusion, 403/500 cooldown, restart and 20 clients sharing one serving proxy. These support the single-serving-proxy acceptance scope, not independent distributed replicas or full globe source-loss acceptance. No expanded-ID coverage claim.
+- **Final patch verification:** after the stationary-camera refresh adjustment, all 31 affected FIRMS card/interaction tests passed; whitespace verification passed. The earlier 77-test run preceded that final adjustment; unaffected satellite/proxy/admission checks were not redundantly rerun. Browser evidence above was collected after the final production adjustment. Shell runtime: Node 20.19.2; no supported-runtime full build is claimed.
+- Workspace changes owned by this continuation: `src/data/firmsHeatmap.js`, `src/data/firmsInteraction.test.mjs`, and this appended status record. No commit, push, deployment, new service or deliverable screenshot was created. Temporary browser harness/results are run-owned scratch, not a durable handoff.
+- **Requested final disposition: blocked.** This run still lacks `PAPERCLIP_API_KEY`; the scoped heartbeat-context read returned HTTP 401. Per the assignment's explicit 401 rule, status is saved only here. No comment/PATCH/upload/work-product registration was attempted after confirming 401, and none is claimed successful. The report/source access paths cannot be registered while authentication is unavailable. Named unblock owner/action: Paperclip runtime owner restores run-scoped credential injection and resumes Astra; Astra then publishes/registers the report and source work products and completes or delegates the remaining A14/A15 operator acceptance. Adapter/runtime recovery must persist the blocked disposition; successful local work is not issue completion.
+
+### Astra disposition recovery — 2026-09-13 (OSA-14)
+
+- Handled the `finish_successful_run_handoff` wake: requested disposition is **blocked**, not done. Existing FIRMS repair, 31 passing affected tests and browser evidence above remain the implementation record; no redundant code changes or test runs were made.
+- Fresh recovery-run check: `PAPERCLIP_API_KEY` remains absent and scoped heartbeat-context returned HTTP 401. No native Paperclip coordination tools are exposed. The wake shows that the adapter persisted the previous final response as an agent comment, but issue status remains `in_progress`; that comment is not a saved blocker or continuation path.
+- Following the assignment's explicit 401 fallback, status is recorded only in this document. No authenticated issue update, artifact upload or work-product registration can be claimed. No mutation was retried with absent credentials.
+- Unblock owner/action: Paperclip runtime owner restores run-scoped authentication and resumes Astra. Astra then registers the saved report/source work products and completes or delegates the remaining A14/A15 operator acceptance. Adapter/runtime recovery must save **blocked** rather than treating successful heartbeat execution as completed acceptance or starting another unchanged handoff loop. MF-11 remains enforced; no new research source admitted.

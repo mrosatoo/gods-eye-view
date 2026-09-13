@@ -133,7 +133,14 @@ export function evaluateLowSog(vessels, { globallyTruncated = false, nowMs = Dat
   const clusters = [];
 
   for (const [regionId, rv] of regionVessels) {
-    const slowVessels = rv.filter((v) => isValidSpeed(v.sog) && v.sog < CLUSTER_SOG_THRESHOLD_KN);
+    const slowSeen = new Set();
+    const slowVessels = rv.filter((v) => {
+      if (!isValidSpeed(v.sog) || v.sog >= CLUSTER_SOG_THRESHOLD_KN) return false;
+      const key = String(v.mmsi);
+      if (slowSeen.has(key)) return false;
+      slowSeen.add(key);
+      return true;
+    });
 
     if (slowVessels.length < CLUSTER_MIN_VESSELS) continue;
 
@@ -155,8 +162,8 @@ export function evaluateLowSog(vessels, { globallyTruncated = false, nowMs = Dat
         }
       }
 
-      if (group.length >= CLUSTER_MIN_VESSELS) {
-        const mmsis = new Set(group.map((idx) => String(slowVessels[idx].mmsi)));
+      const mmsis = new Set(group.map((idx) => String(slowVessels[idx].mmsi)));
+      if (mmsis.size >= CLUSTER_MIN_VESSELS) {
         let sumLat = 0;
         let sumLon = 0;
         for (const idx of group) {

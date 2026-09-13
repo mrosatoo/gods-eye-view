@@ -31,3 +31,8 @@ test('stale observations cannot form clusters even with fresh receipt clocks', (
     sourceTimestamp: new Date(nowMs - CANDIDATE_MAX_AGE_MS - 1).toISOString() }));
   assert.deepEqual(evaluateLowSog(vessels, { nowMs }).clusters, []);
 });
+test('duplicate MMSI reports do not inflate cluster count (MF-4)', () => {
+  const dupes = Array.from({ length: 5 }, () => ({ ...vessel }));
+  const { clusters } = evaluateLowSog(dupes, { nowMs });
+  assert.deepEqual(clusters, [], 'five copies of one MMSI must not create a cluster');
+});

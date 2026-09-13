@@ -430,7 +430,7 @@ export function createFirmsHeatmapLayer({
         if (response.status === 503 && payload?.error === 'no_key') {
           _keyRequired = true;
           _error = null;
-          _stale = false;
+          markRetainedUnavailable('key required');
           return;
         }
         throw new Error(`FIRMS HTTP ${response.status}`);
@@ -475,11 +475,22 @@ export function createFirmsHeatmapLayer({
       if (reselected) selectFire(reselected);
     } catch (error) {
       console.warn(`[Data:${id}] FIRMS live load failed:`, error);
+      _keyRequired = false;
       _error = 'NRT detection feed unavailable';
-      for (const fire of _fires) fire.sourceSupport = 'STALE snapshot · NRT feed unavailable';
+      markRetainedUnavailable();
     } finally {
       _loading = false;
     }
+  }
+
+  function markRetainedUnavailable(reason = '') {
+    _stale = _fires.length > 0;
+    for (const fire of _fires) {
+      fire.sourceSupport = `STALE snapshot · NRT feed unavailable${reason ? ` · ${reason}` : ''}`;
+    }
+    // Rebuild cached overlay models even with a stationary camera, and refresh
+    // registered context from the retained observations and original clocks.
+    if (_fires.length) renderCurrentLod(true);
   }
 
   /**

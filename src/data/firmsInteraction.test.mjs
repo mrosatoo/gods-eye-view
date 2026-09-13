@@ -75,6 +75,7 @@ function harness({
   const viewer = {
     scene: {
       pick: () => picked,
+      primitives: { add(value) { return value; }, contains() { return false; } },
       canvas: { clientWidth: 1280, clientHeight: 800 },
       camera: cameraPosition ? { positionWC: cameraPosition } : undefined,
       globe: { ellipsoid: Cesium.Ellipsoid.WGS84 },
@@ -323,6 +324,31 @@ test('NRT feed preserves sensor duplicates, partial support and unknown receipt 
     assert.equal(h.layer.getStats().lastUpdate, null, 'malformed data does not refresh the clock');
   } finally {
     h.cleanup();
+  }
+});
+
+test('source loss marks retained detections stale, including key removal', async (t) => {
+  for (const error of ['no_key', 'source_unavailable']) {
+    const fire = makeFire({ product: 'VIIRS_NOAA21_NRT', sourceSupport: 'VIIRS NRT source support complete' });
+    const h = harness({ fires: [fire], withDataSource: true });
+    const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({
+      ok: false, status: 503, json: async () => ({ error }),
+    }));
+    try {
+      const acquisition = fire.acqMs;
+      await h.layer.update();
+      assert.equal(h.layer.getStats().stale, true);
+      assert.equal(fire.acqMs, acquisition);
+      const card = buildSelectedFireCard(fire);
+      assert.match(card.details[2], /VIIRS_NOAA21_NRT.*STALE snapshot.*NRT feed unavailable/);
+      if (error === 'no_key') {
+        assert.equal(h.layer.getStats().error, 'KEY REQUIRED');
+        assert.match(card.details[2], /key required/);
+      }
+    } finally {
+      fetchMock.mock.restore();
+      h.cleanup();
+    }
   }
 });
 
