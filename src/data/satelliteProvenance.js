@@ -15,10 +15,24 @@ export function parseTLE(text) {
 /** Element time is independent of both fetch time and SGP4 propagation time. */
 export function satelliteElementLabel(satrec, nowMs = Date.now()) {
   const epochMs = (satrec?.jdsatepoch - 2440587.5) * 86400000;
-  if (!Number.isFinite(epochMs)) return 'PROPAGATED · TLE epoch unknown';
+  if (!Number.isFinite(epochMs)) return 'PROPAGATED · TLE epoch unknown · STALE';
   const age = nowMs - epochMs;
+  const staleMs = 86_400_000;
   const ageText = age < 0 ? 'future epoch' : age < 3600000 ? '<1h old'
     : age < 48 * 3600000 ? `${Math.floor(age / 3600000)}h old`
       : `${Math.floor(age / 86400000)}d old`;
-  return `PROPAGATED · TLE ${new Date(epochMs).toISOString().slice(0, 16)}Z · ${ageText}`;
+  const staleTag = (age > staleMs || age < 0) ? ' · STALE' : '';
+  return `PROPAGATED · TLE ${new Date(epochMs).toISOString().slice(0, 16)}Z · ${ageText}${staleTag}`;
+}
+
+export function satelliteTleEpochMs(satrec) {
+  const epochMs = (satrec?.jdsatepoch - 2440587.5) * 86400000;
+  return Number.isFinite(epochMs) && epochMs > 0 ? epochMs : null;
+}
+
+export function isTleEpochStale(satrec, nowMs = Date.now()) {
+  const epochMs = satelliteTleEpochMs(satrec);
+  if (epochMs == null) return true;
+  const age = nowMs - epochMs;
+  return age > 86_400_000 || age < 0;
 }

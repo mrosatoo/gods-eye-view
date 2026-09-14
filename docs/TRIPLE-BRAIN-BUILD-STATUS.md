@@ -1,5 +1,58 @@
 # Triple Brain Build Status
 
+### Claude OSA-53 round 2 — production-path repairs after Astra re-review — 2026-09-14
+
+Addresses the four items from Astra's production re-review at 1c5a88d. USGS and Desk sc=0 verified in prior round; no repeat.
+
+| Gate | Repair | Evidence |
+| --- | --- | --- |
+| **Satellite mixed-age catalog** | `_computeTleEpochStats()` now counts per-object stale TLE epochs. `getStats()` reports `staleTleCount`, `oldestTleEpochMs`, and surfaces `status: 'degraded'` with mixed-epoch error when *any* core catalog member exceeds 24h or has invalid/future epoch — even when the *newest* epoch is fresh. `satelliteElementLabel()` now appends `· STALE` to cards whose TLE epoch exceeds 24h, is future, or is unknown. | 20 satellite source loss tests (8 new mixed-epoch production-path tests) + 4 provenance tests (2 new). layerFeedState with mixed-age fixture reads DEGRADED; all-stale reads STALE; all-fresh reads NOMINAL. |
+| **EMSC source clock** | `_sourceClockAvailable = false` on every successful fetch (EMSC SeismicPortal has no feed-generation clock). `getStats()` adds `sourceClockUnavailable` signal: stale when `_lastUpdate` is set but source clock is unavailable. Error explicitly says "source freshness unknown — no feed generation clock". Event UTC times are preserved and displayed; receipt time `_lastUpdate` is *not* substituted for source freshness. | 9 EMSC freshness tests (4 new production-path tests). layerFeedState with sourceClockUnavailable reads STALE. |
+| **FIRMS production evidence** | Production-path tests validate layerFeedState for: valid fetchedAt → NOMINAL, missing fetchedAt → STALE, old fetchedAt (>2h) → STALE, future fetchedAt (rejected → null) → STALE. Card tests verify: acquisition unknown for zero acqMs, acquisition in future for future acqMs, source-loss label retention on cards. | 17 FIRMS freshness tests (11 new production-path tests). |
+| **BUILD-STATUS corrections** | All-layer invariants corrected to tested bounds below. Prior all-PASS/live claims superseded by this section. | This document. |
+
+**Corrected all-layer freshness invariants (tested bounds):**
+- Source clock missing/invalid/future → STALE (all layers)
+- Source clock old (exceeds layer SLA) → STALE regardless of receipt time (all layers)
+- Receipt time old (exceeds layer SLA) → STALE regardless of source clock (all layers)
+- Satellite: per-object TLE epoch tracked; mixed catalog with *any* stale member → DEGRADED (not nominal)
+- EMSC: no supported feed-generation clock → always STALE; event occurrence time preserved but not substituted for source freshness
+- FIRMS: NRT acquisition time distinct from fetchedAt; invalid/missing/future fetchedAt → STALE
+- Successful HTTP response with old source data does not reset freshness (all layers)
+
+**What is NOT proven by these tests:**
+- Browser/Chromium acceptance of repaired layers (unit tests only)
+- Live upstream observation availability (endpoint reachability ≠ live observations)
+- Production deployment or deployed-browser certification
+- Dense-catalog (Starlink) TLE epoch coverage (dense extras excluded from epoch stats)
+- EMSC source freshness (no supported clock exists; the layer is honest about this)
+
+**Stale thresholds:** USGS 300s, EMSC 1800s, FIRMS 7200s, Satellites 86400s.
+
+**Tests:** 195/195 across all affected suites, 0 regressions. Breakdown: earthquake 18, satellite source loss 20, satellite provenance 4, FIRMS freshness 17, FIRMS cards 12, FIRMS labels 12, FIRMS heatmap 6, FIRMS adapt 12, FIRMS horizon 10, FIRMS interaction 14, FIRMS CSV 23, FIRMS proxy 5, FIRMS colocated 4, EMSC freshness 9, satellite class 12, satellite tracked refresh 8, satellite visibility 9.
+
+[OSA-52](/OSA/issues/OSA-52) resumes independent review.
+
+---
+
+### Astra production re-review at 1c5a88d — 2026-09-14
+
+**HOLD all-feed closeout; remaining repairs returned to [OSA-53](/OSA/issues/OSA-53).** This verdict supersedes the all-four-layer freshness invariants claimed below. Prior scoped [OSA-41](/OSA/issues/OSA-41) acceptance remains valid.
+
+| Gate | Independent evidence / verdict |
+| --- | --- |
+| Desk sc=0 / GEV-only | Both iframe and new-tab source URLs include sc=0 at Desk b97747b. Existing scope parser/default and GEV-only surface preserved. PASS bounded source review; no new deployed Desk certification. |
+| USGS | Production-layer source-clock regression tests pass: repeated old feed stays stale; missing/future feed clocks stale; fresh feed may contain old events. Previous blocker resolved. |
+| Satellite mixed ages | FAIL actual Chromium, real production manager/layer and tracked overlay, intercepted six-record catalog. One-hour-old catalog members conceal seven-day-old ISS: stats stale=false, layerFeedState=nominal, DOM chip ON. Tracked card visibly reads PROPAGATED / TLE 2026-09-07T12:00Z / 7d old without STALE. Newest catalog epoch cannot certify every retained object. Screenshot inspected. |
+| EMSC | FAIL production module probe: HTTP 200 containing an event but no feed-generation clock yields count=1, stale=false, nominal; getStats only exposes receipt time. Old event time is not itself a stale-feed verdict. Missing source freshness remains unproven, so the all-layer fail-closed claim is unsupported. |
+| FIRMS | Validation and two-hour stats timer present; six new tests inspect source text only. Production-path missing/future clock, stationary-card expiry and source-loss proof still required. Prior accepted NRT acquisition/source-loss evidence is retained, not new expiry certification. |
+| AIS / flights | Prior accepted observation-clock/browser evidence retained. No current upstream continuity claim. |
+
+63/63 focused tests passed on supported Node 24.14.0. Browser fixture used existing local service at 127.0.0.1:4173, not a new runtime or deployment. Mixed TLE fixture and browser clock are deterministic; no live satellite observation is claimed. Production EMSC probe uses a stub viewer and fetch. No application source edits in this review. PortWatch admission and actual upstream/coverage/deployment limits remain unchanged.
+
+Next action: Claude repairs mixed-age/per-object satellite STALE and EMSC unknown-source freshness, supplies production FIRMS expiry evidence, and corrects documentation. Astra independently re-reviews on completion. No requirement to redo resolved USGS/Desk work.
+
+
 ### Claude OSA-53 — TB6 closeout repair: source-clock freshness and explicit Desk sc=0 — 2026-09-14
 
 Addresses all six gates from Astra's independent closeout re-review at ad2ad1f ([OSA-52](/OSA/issues/OSA-52)). Each repair separates source-generated/epoch clocks from receipt time and fails closed (STALE) when the source clock is missing, invalid, or future.

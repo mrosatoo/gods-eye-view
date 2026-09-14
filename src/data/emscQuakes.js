@@ -19,6 +19,7 @@ let _entities = [];
 let _refreshTimer = null;
 let _lastUpdate = null;
 let _lastError = null;
+let _sourceClockAvailable = false;
 
 function magColor(mag) {
   if (mag >= 6) return Cesium.Color.fromCssColorString('rgba(255, 61, 0, 0.7)');
@@ -56,6 +57,7 @@ async function fetchAndRender() {
 
     _lastUpdate = Date.now();
     _lastError = null;
+    _sourceClockAvailable = false;
     for (const f of features) {
       const coords = f.geometry?.coordinates;
       const props = f.properties || {};
@@ -114,18 +116,20 @@ const emscQuakes = {
     if (_refreshTimer) { clearInterval(_refreshTimer); _refreshTimer = null; }
     clearEntities();
   },
-  destroy() { this.disable(); _viewer = null; _lastUpdate = null; _lastError = null; },
+  destroy() { this.disable(); _viewer = null; _lastUpdate = null; _lastError = null; _sourceClockAvailable = false; },
   getStats() {
     const now = Date.now();
     const receiptStale = _lastUpdate != null && (now - _lastUpdate) > EMSC_STALE_MS;
     const clockMissing = _entities.length > 0 && _lastUpdate == null;
-    const stale = receiptStale || clockMissing;
+    const sourceClockUnavailable = _lastUpdate != null && !_sourceClockAvailable;
+    const stale = receiptStale || clockMissing || sourceClockUnavailable;
     return {
       enabled: _enabled,
       count: _entities.length,
       lastUpdate: _lastUpdate,
       stale,
-      error: _lastError,
+      sourceClockAvailable: _sourceClockAvailable,
+      error: _lastError || (sourceClockUnavailable ? 'source freshness unknown — no feed generation clock' : null),
     };
   },
 };

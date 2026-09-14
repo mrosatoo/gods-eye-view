@@ -196,6 +196,8 @@ let _orbitPaths = new Map();
 let _count = 0;
 let _lastUpdate = null;
 let _newestTleEpochMs = null;
+let _oldestTleEpochMs = null;
+let _staleTleCount = 0;
 /** @type {string|null} Surfaced feed error (e.g. CelesTrak outage) for the layer chip. */
 let _lastError = null;
 const _activeUpdateControllers = new Set();
@@ -272,6 +274,27 @@ function _computeNewestTleEpoch() {
     if (newest === null || epochMs > newest) newest = epochMs;
   }
   return newest;
+}
+
+function _computeTleEpochStats() {
+  const SAT_STALE_MS = 86_400_000;
+  const now = Date.now();
+  let newest = null;
+  let oldest = null;
+  let staleCount = 0;
+  let missingCount = 0;
+  for (const sat of _catalog.values()) {
+    if (sat.group === 'dense') continue;
+    const epochMs = (sat.satrec?.jdsatepoch - 2440587.5) * 86400000;
+    if (!Number.isFinite(epochMs) || epochMs <= 0) {
+      missingCount++;
+      continue;
+    }
+    if (newest === null || epochMs > newest) newest = epochMs;
+    if (oldest === null || epochMs < oldest) oldest = epochMs;
+    if ((now - epochMs) > SAT_STALE_MS || epochMs > now + 30_000) staleCount++;
+  }
+  return { newest, oldest, staleCount, missingCount };
 }
 
 /**
@@ -1534,6 +1557,8 @@ const satellitesLayer = {
     _count = 0;
     _lastUpdate = null;
     _newestTleEpochMs = null;
+    _oldestTleEpochMs = null;
+    _staleTleCount = 0;
     _trackedNorad = null;
     _cancelPendingTrackingRestore();
     _trackedEntity = null;
@@ -1748,7 +1773,10 @@ const satellitesLayer = {
 
       _count = _points.size;
       _catalogRevision++;
-      _newestTleEpochMs = _computeNewestTleEpoch();
+      const epochStats = _computeTleEpochStats();
+      _newestTleEpochMs = epochStats.newest;
+      _oldestTleEpochMs = epochStats.oldest;
+      _staleTleCount = epochStats.staleCount;
       _lastUpdate = Date.now();
       _lastPropagation = Date.now();
       _lastTrackingRefreshOutcome = {
@@ -1824,6 +1852,8 @@ const satellitesLayer = {
     _count = 0;
     _lastUpdate = null;
     _newestTleEpochMs = null;
+    _oldestTleEpochMs = null;
+    _staleTleCount = 0;
     _lastError = null;
     _lastFocusUpdate = 0;
     _activeFocusCount = 0;
@@ -2190,16 +2220,23 @@ const satellitesLayer = {
     const tleClockMissing = _lastUpdate != null && _newestTleEpochMs == null;
     const tleClockFuture = _newestTleEpochMs != null
       && _newestTleEpochMs > now + 30_000;
+    const hasStaleTleMembers = _staleTleCount > 0;
     const stale = receiptStale || tleEpochStale || tleClockMissing || tleClockFuture;
+    const mixedEpochError = hasStaleTleMembers && !stale
+      ? `${_staleTleCount} object${_staleTleCount === 1 ? '' : 's'} with stale/invalid TLE epoch`
+      : null;
+    const effectiveError = _lastError || mixedEpochError;
     return {
       count: _count,
       lastUpdate: _lastUpdate,
       newestTleEpochMs: _newestTleEpochMs,
+      oldestTleEpochMs: _oldestTleEpochMs,
+      staleTleCount: _staleTleCount,
       stale,
       status: _lastError === 'CelesTrak unreachable'
         ? 'unavailable'
-        : (_lastError ? 'degraded' : 'nominal'),
-      error: _lastError,
+        : (effectiveError ? 'degraded' : 'nominal'),
+      error: effectiveError,
     };
   },
 };

@@ -52,8 +52,8 @@ test('MF-14: getStats status derivation is correct for all three states', async 
   assert.ok(statsBlock, 'getStats() exists with status derivation');
   assert.match(statsBlock[1], /CelesTrak unreachable/,
     'total outage maps to unavailable');
-  assert.match(statsBlock[1], /_lastError \? 'degraded' : 'nominal'/,
-    'any error is degraded, no error is nominal');
+  assert.match(statsBlock[1], /effectiveError \? 'degraded' : 'nominal'/,
+    'any error (including mixed epoch) is degraded, no error is nominal');
 });
 
 // ─── MF-14 §3: outage guard — total failure preserves stale catalog ─────
@@ -170,12 +170,12 @@ test('OSA-53: newestTleEpochMs is cleared in destroy()', async () => {
     'destroy clears TLE epoch state');
 });
 
-test('OSA-53: newestTleEpochMs is computed before _lastUpdate in update()', async () => {
+test('OSA-53: TLE epoch stats are computed before _lastUpdate in update()', async () => {
   const source = await readFile(new URL('./satellites.js', import.meta.url), 'utf8');
-  const epochIdx = source.indexOf('_newestTleEpochMs = _computeNewestTleEpoch()');
+  const epochIdx = source.indexOf('_computeTleEpochStats()');
   const updateIdx = source.indexOf('_lastUpdate = Date.now()', epochIdx);
-  assert.ok(epochIdx > 0, 'epoch computation exists in update');
-  assert.ok(updateIdx > epochIdx, 'epoch computed before receipt timestamp');
+  assert.ok(epochIdx > 0, 'epoch stats computation exists in update');
+  assert.ok(updateIdx > epochIdx, 'epoch stats computed before receipt timestamp');
 });
 
 test('OSA-53: getStats returns newestTleEpochMs in stats object', async () => {
@@ -183,4 +183,92 @@ test('OSA-53: getStats returns newestTleEpochMs in stats object', async () => {
   const statsBlock = source.slice(source.indexOf('getStats()'));
   assert.match(statsBlock, /newestTleEpochMs:\s*_newestTleEpochMs/,
     'stats exposes TLE epoch for consumers');
+});
+
+// ─── OSA-53 §2: Mixed TLE epoch detection (production behavior) ──────────
+
+test('OSA-53: getStats source-code tracks stale TLE member count', async () => {
+  const source = await readFile(new URL('./satellites.js', import.meta.url), 'utf8');
+  const statsBlock = source.slice(source.indexOf('getStats()'));
+  assert.match(statsBlock, /hasStaleTleMembers\s*=\s*_staleTleCount > 0/,
+    'detects when any catalog members have stale TLE epochs');
+  assert.match(statsBlock, /staleTleCount:\s*_staleTleCount/,
+    'exposes stale member count in stats');
+});
+
+test('OSA-53: mixed-epoch catalog surfaces degraded status even when newest is fresh', async () => {
+  const source = await readFile(new URL('./satellites.js', import.meta.url), 'utf8');
+  const statsBlock = source.slice(source.indexOf('getStats()'));
+  assert.match(statsBlock, /mixedEpochError/,
+    'mixed epoch error is computed separately from catalog-wide stale');
+  assert.match(statsBlock, /effectiveError\s*=\s*_lastError \|\| mixedEpochError/,
+    'mixed epoch error feeds into status derivation when no CelesTrak error');
+});
+
+test('OSA-53: _computeTleEpochStats counts per-object stale members', async () => {
+  const source = await readFile(new URL('./satellites.js', import.meta.url), 'utf8');
+  const fnMatch = source.match(/function _computeTleEpochStats[\s\S]*?^}/m);
+  assert.ok(fnMatch, '_computeTleEpochStats exists');
+  assert.match(fnMatch[0], /staleCount\+\+/, 'increments stale count per object');
+  assert.match(fnMatch[0], /missingCount/, 'tracks missing epoch count');
+  assert.match(fnMatch[0], /dense.*continue/i, 'excludes dense extras from epoch stats');
+});
+
+test('OSA-53: production layerFeedState for mixed-epoch satellite catalog reads DEGRADED', () => {
+  const stats = {
+    count: 6,
+    lastUpdate: Date.now(),
+    newestTleEpochMs: Date.now() - 3600_000,
+    oldestTleEpochMs: Date.now() - 7 * 86_400_000,
+    staleTleCount: 1,
+    stale: false,
+    status: 'degraded',
+    error: '1 object with stale/invalid TLE epoch',
+  };
+  assert.equal(layerFeedState(stats), 'degraded',
+    'mixed catalog with 1 stale member maps to DEGRADED chip, not nominal');
+});
+
+test('OSA-53: production layerFeedState for all-fresh catalog reads NOMINAL', () => {
+  const stats = {
+    count: 838,
+    lastUpdate: Date.now(),
+    newestTleEpochMs: Date.now() - 3600_000,
+    oldestTleEpochMs: Date.now() - 12 * 3600_000,
+    staleTleCount: 0,
+    stale: false,
+    status: 'nominal',
+    error: null,
+  };
+  assert.equal(layerFeedState(stats), 'nominal',
+    'all-fresh catalog maps to NOMINAL chip');
+});
+
+test('OSA-53: production layerFeedState for all-stale catalog reads STALE', () => {
+  const stats = {
+    count: 6,
+    lastUpdate: Date.now(),
+    newestTleEpochMs: Date.now() - 3 * 86_400_000,
+    oldestTleEpochMs: Date.now() - 7 * 86_400_000,
+    staleTleCount: 6,
+    stale: true,
+    status: 'degraded',
+    error: '6 objects with stale/invalid TLE epoch',
+  };
+  assert.equal(layerFeedState(stats), 'stale',
+    'all-stale catalog maps to STALE chip');
+});
+
+test('OSA-53: destroy clears all TLE epoch tracking state', async () => {
+  const source = await readFile(new URL('./satellites.js', import.meta.url), 'utf8');
+  const destroyBlock = source.slice(source.indexOf('destroy(viewer)'));
+  assert.match(destroyBlock, /_oldestTleEpochMs\s*=\s*null/, 'destroy clears oldest epoch');
+  assert.match(destroyBlock, /_staleTleCount\s*=\s*0/, 'destroy clears stale count');
+});
+
+test('OSA-53: init clears all TLE epoch tracking state', async () => {
+  const source = await readFile(new URL('./satellites.js', import.meta.url), 'utf8');
+  const initBlock = source.slice(source.indexOf('async init(viewer)'));
+  assert.match(initBlock, /_oldestTleEpochMs\s*=\s*null/, 'init clears oldest epoch');
+  assert.match(initBlock, /_staleTleCount\s*=\s*0/, 'init clears stale count');
 });
