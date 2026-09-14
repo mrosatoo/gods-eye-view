@@ -1,5 +1,50 @@
 # Triple Brain Build Status
 
+### Claude OSA-53 — TB6 closeout repair: source-clock freshness and explicit Desk sc=0 — 2026-09-14
+
+Addresses all six gates from Astra's independent closeout re-review at ad2ad1f ([OSA-52](/OSA/issues/OSA-52)). Each repair separates source-generated/epoch clocks from receipt time and fails closed (STALE) when the source clock is missing, invalid, or future.
+
+| Gate | Repair applied | Evidence |
+| --- | --- | --- |
+| **Desk sc=0** | Both iframe `embedSrc` and new-tab `href` in `GodEyeClient.tsx` now include explicit `&sc=0`. Zoom/photoreal and GEV-only surface preserved. | `GodEyeClient.tsx:71,106`; `sharelink.js:208` confirms `sc=0` → scope OFF. |
+| **USGS source freshness** | `earthquakes.js` now tracks `_feedGenerated` from `metadata.generated`. `getStats()` asserts STALE on: receipt age >5 min, feed-generated age >5 min, or feed clock missing/invalid/future (>30s ahead). Repeating an old response no longer resets freshness. Old earthquake events in a fresh 24h snapshot remain valid (event time ≠ feed age). | 18/18 earthquake tests including 5 new source-clock tests. |
+| **Satellites** | `satellites.js` now computes `_newestTleEpochMs` via `_computeNewestTleEpoch()` scanning all satrec Julian epochs. `getStats()` asserts STALE on: receipt age >24h, newest TLE epoch age >24h, TLE clock missing, or TLE clock future (>30s ahead). Successful HTTP no longer rescues old TLE epochs. PROPAGATED is not a live observation. | 17/17 satellite source loss tests including 6 new TLE epoch tests. |
+| **FIRMS** | `firmsHeatmap.js` now validates `fetchedAt`: must be finite, >0, ≤ now+30s. Invalid/missing/future fetchedAt → `_lastUpdate = null`. `getStats()` asserts STALE when fires exist but clock is null (`clockMissing`). | 6/6 new FIRMS freshness tests + 12/12 existing firmsCards tests. |
+| **EMSC** | `emscQuakes.js` `getStats()` asserts STALE when entities exist but `_lastUpdate` is null (`clockMissing`). Non-OK HTTP now surfaces as `_lastError` and returns early (no silent swallow). | 5/5 new EMSC freshness tests. |
+| **AIS / flights** | Prior accepted controlled browser freshness evidence retained; no changes needed — these layers already use source observation time. | Prior evidence from [OSA-43](/OSA/issues/OSA-43). |
+
+**Freshness invariants enforced across all four repaired layers:**
+- Source clock missing → STALE (unknown clock = honest)
+- Source clock future (>30s ahead) → invalid → treated as missing → STALE
+- Source clock old (exceeds layer SLA) → STALE regardless of receipt time
+- Receipt time old (exceeds layer SLA) → STALE regardless of source clock
+- Successful HTTP response with old source data does not reset freshness
+
+**Stale thresholds:** USGS 300s (5 min), EMSC 1800s (30 min), FIRMS 7200s (2h), Satellites 86400s (24h).
+
+**Tests:** 63/63 across all affected suites (earthquakes: 18, satellite source loss: 17, firmsCards: 12, FIRMS freshness: 6, EMSC freshness: 5, source freshness: 3, satellite provenance: 2). Zero regressions.
+
+**Not claimed:** Browser acceptance of the repaired layers, live upstream verification, production deployment. [OSA-52](/OSA/issues/OSA-52) resumes independent review.
+
+---
+
+### Astra independent closeout re-review at ad2ad1f — 2026-09-14
+
+**HOLD broader all-feed closeout.** This review supersedes the all-PASS closeout claims below, while preserving prior scoped [OSA-41](/OSA/issues/OSA-41) acceptance. Remaining repairs are assigned to Claude in [OSA-53](/OSA/issues/OSA-53); [OSA-52](/OSA/issues/OSA-52) resumes independent review when that dependency completes.
+
+| Gate | Current evidence / verdict |
+| --- | --- |
+| Scope default OFF / explicit Desk sc=0 | Default OFF remains accepted. Both Desk entry URLs still omit sc=0; explicit entry contract OPEN. Photoreal is a GEV default, not an explicit parameter in the inspected Desk URLs. |
+| GEV-only Desk | PASS bounded source inspection: GEV iframe and Reachable badge, no Osiris product chrome. No new deployed-browser certification. |
+| USGS source freshness | FAIL production probe: HTTP 200 with day-old metadata.generated gives nominal; after 300001ms it becomes stale; repeating the same old response returns to nominal. getStats has receipt time only. HTTP 503 retains one record and reports degraded. |
+| Satellites | Receipt-age expiration added (24h), but successful fetch still stamps Date.now, independent of original TLE epoch. Source-age STALE certification OPEN. PROPAGATED must not be characterized as live observation. |
+| FIRMS | Two-hour fetchedAt age backup added in getStats; independent expiration now implemented. Unknown/future clock and production card aging evidence remain OPEN; no new browser verification claimed. |
+| EMSC | Receipt-age timer added; source-clock/unknown-time verification OPEN. |
+| AIS / flights | Prior accepted controlled browser freshness evidence retained; no upstream continuity certification from this run. |
+
+Verification: 30/30 focused earthquakes, satelliteProvenance, sourceFreshness and firmsCards tests pass on Node 24.14.0. Independent runnable quake probe confirms both the fixed no-refresh expiry and unresolved repeated-old-response defect. Static Desk source inspected at src/components/god-eye/GodEyeClient.tsx. No application source changes, deployment, new runtime service or live upstream checks. Prior endpoint connectivity is not proof of current observations. PortWatch admission, representative AIS coverage and production deployment remain documented residuals.
+
+
 ### Claude OSA-51 — TB6 CLOSEOUT after acceptance — 2026-09-14
 
 TB6 acceptance ACCEPTED ([OSA-48](/OSA/issues/OSA-48)/[OSA-41](/OSA/issues/OSA-41)). This closeout verifies the four remaining items from [OSA-37](/OSA/issues/OSA-37) epic.

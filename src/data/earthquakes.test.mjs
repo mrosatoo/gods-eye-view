@@ -402,7 +402,7 @@ test('malformed earthquake refresh preserves entities, overlays, count and times
   }
 });
 
-test('getStats stale: false immediately after successful update', async () => {
+test('getStats stale: false immediately after successful update with fresh metadata.generated', async () => {
   const originalFetch = globalThis.fetch;
   const viewer = {
     dataSources: { add(ds) { return ds; }, remove() { return true; } },
@@ -413,9 +413,14 @@ test('getStats stale: false immediately after successful update', async () => {
   try {
     layer.init(viewer);
     const good = { type: 'Feature', geometry: { type: 'Point', coordinates: [-150, 61] }, properties: { mag: 5, place: 'Test', time: Date.now(), detail: '' } };
-    globalThis.fetch = async () => ({ ok: true, json: async () => ({ type: 'FeatureCollection', features: [good] }) });
+    globalThis.fetch = async () => ({ ok: true, json: async () => ({
+      type: 'FeatureCollection',
+      metadata: { generated: Date.now() },
+      features: [good],
+    }) });
     await layer.update(viewer);
     assert.equal(layer.getStats().stale, false);
+    assert.ok(Number.isFinite(layer.getStats().feedGenerated));
   } finally {
     globalThis.fetch = originalFetch;
     layer.destroy(viewer);
@@ -437,13 +442,144 @@ test('getStats stale: true when lastUpdate exceeds 300s threshold', async () => 
   try {
     layer.init(viewer);
     const good = { type: 'Feature', geometry: { type: 'Point', coordinates: [-150, 61] }, properties: { mag: 5, place: 'Test', time: baseTime, detail: '' } };
-    globalThis.fetch = async () => ({ ok: true, json: async () => ({ type: 'FeatureCollection', features: [good] }) });
+    globalThis.fetch = async () => ({ ok: true, json: async () => ({
+      type: 'FeatureCollection',
+      metadata: { generated: fakeNow },
+      features: [good],
+    }) });
     await layer.update(viewer);
     assert.equal(layer.getStats().stale, false, 'fresh after update');
     fakeNow = baseTime + 300_001;
     assert.equal(layer.getStats().stale, true, 'stale after 300s');
   } finally {
     Date.now = originalDateNow;
+    globalThis.fetch = originalFetch;
+    layer.destroy(viewer);
+  }
+});
+
+test('getStats: day-old metadata.generated is stale even on fresh HTTP', async () => {
+  const originalFetch = globalThis.fetch;
+  const viewer = {
+    dataSources: { add(ds) { return ds; }, remove() { return true; } },
+  };
+  const layer = createEarthquakesLayer({
+    overlayHost: { setEntries() {}, setVisible() {}, clearSource() {} },
+  });
+  try {
+    layer.init(viewer);
+    const dayOld = Date.now() - 86_400_000;
+    const good = { type: 'Feature', geometry: { type: 'Point', coordinates: [-150, 61] }, properties: { mag: 5, place: 'Test', time: dayOld } };
+    globalThis.fetch = async () => ({ ok: true, json: async () => ({
+      type: 'FeatureCollection',
+      metadata: { generated: dayOld },
+      features: [good],
+    }) });
+    await layer.update(viewer);
+    assert.equal(layer.getStats().stale, true, 'day-old feed generation is stale');
+    assert.equal(layer.getStats().feedGenerated, dayOld);
+    assert.ok(Number.isFinite(layer.getStats().lastUpdate), 'receipt time still tracked');
+  } finally {
+    globalThis.fetch = originalFetch;
+    layer.destroy(viewer);
+  }
+});
+
+test('getStats: repeated old payload remains stale (receipt time does not rescue old feed)', async () => {
+  const originalFetch = globalThis.fetch;
+  const viewer = {
+    dataSources: { add(ds) { return ds; }, remove() { return true; } },
+  };
+  const layer = createEarthquakesLayer({
+    overlayHost: { setEntries() {}, setVisible() {}, clearSource() {} },
+  });
+  try {
+    layer.init(viewer);
+    const dayOld = Date.now() - 86_400_000;
+    const good = { type: 'Feature', geometry: { type: 'Point', coordinates: [-150, 61] }, properties: { mag: 5, place: 'Test', time: dayOld } };
+    const payload = { type: 'FeatureCollection', metadata: { generated: dayOld }, features: [good] };
+    globalThis.fetch = async () => ({ ok: true, json: async () => payload });
+    await layer.update(viewer);
+    assert.equal(layer.getStats().stale, true, 'stale on first fetch');
+    await layer.update(viewer);
+    assert.equal(layer.getStats().stale, true, 'stale on repeated identical fetch');
+  } finally {
+    globalThis.fetch = originalFetch;
+    layer.destroy(viewer);
+  }
+});
+
+test('getStats: missing metadata.generated is stale (unknown clock = honest)', async () => {
+  const originalFetch = globalThis.fetch;
+  const viewer = {
+    dataSources: { add(ds) { return ds; }, remove() { return true; } },
+  };
+  const layer = createEarthquakesLayer({
+    overlayHost: { setEntries() {}, setVisible() {}, clearSource() {} },
+  });
+  try {
+    layer.init(viewer);
+    const good = { type: 'Feature', geometry: { type: 'Point', coordinates: [-150, 61] }, properties: { mag: 5, place: 'Test', time: Date.now() } };
+    globalThis.fetch = async () => ({ ok: true, json: async () => ({
+      type: 'FeatureCollection',
+      features: [good],
+    }) });
+    await layer.update(viewer);
+    assert.equal(layer.getStats().stale, true, 'missing source clock is stale');
+    assert.equal(layer.getStats().feedGenerated, null);
+  } finally {
+    globalThis.fetch = originalFetch;
+    layer.destroy(viewer);
+  }
+});
+
+test('getStats: future metadata.generated is rejected (invalid clock = stale)', async () => {
+  const originalFetch = globalThis.fetch;
+  const viewer = {
+    dataSources: { add(ds) { return ds; }, remove() { return true; } },
+  };
+  const layer = createEarthquakesLayer({
+    overlayHost: { setEntries() {}, setVisible() {}, clearSource() {} },
+  });
+  try {
+    layer.init(viewer);
+    const futureGenerated = Date.now() + 600_000;
+    const good = { type: 'Feature', geometry: { type: 'Point', coordinates: [-150, 61] }, properties: { mag: 5, place: 'Test', time: Date.now() } };
+    globalThis.fetch = async () => ({ ok: true, json: async () => ({
+      type: 'FeatureCollection',
+      metadata: { generated: futureGenerated },
+      features: [good],
+    }) });
+    await layer.update(viewer);
+    assert.equal(layer.getStats().stale, true, 'future source clock is stale');
+    assert.equal(layer.getStats().feedGenerated, null, 'future clock rejected');
+  } finally {
+    globalThis.fetch = originalFetch;
+    layer.destroy(viewer);
+  }
+});
+
+test('old earthquake events in a fresh 24h snapshot are valid (event time != feed age)', async () => {
+  const originalFetch = globalThis.fetch;
+  const viewer = {
+    dataSources: { add(ds) { return ds; }, remove() { return true; } },
+  };
+  const layer = createEarthquakesLayer({
+    overlayHost: { setEntries() {}, setVisible() {}, clearSource() {} },
+  });
+  try {
+    layer.init(viewer);
+    const now = Date.now();
+    const eventFromYesterday = { type: 'Feature', geometry: { type: 'Point', coordinates: [-150, 61] }, properties: { mag: 5, place: 'Yesterday', time: now - 20 * 3600_000 } };
+    globalThis.fetch = async () => ({ ok: true, json: async () => ({
+      type: 'FeatureCollection',
+      metadata: { generated: now },
+      features: [eventFromYesterday],
+    }) });
+    await layer.update(viewer);
+    assert.equal(layer.getStats().stale, false, 'fresh feed with old events is not stale');
+    assert.equal(layer.getStats().count, 1, 'old event retained in fresh snapshot');
+  } finally {
     globalThis.fetch = originalFetch;
     layer.destroy(viewer);
   }

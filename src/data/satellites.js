@@ -195,6 +195,7 @@ let _detectionObjects = new Map();
 let _orbitPaths = new Map();
 let _count = 0;
 let _lastUpdate = null;
+let _newestTleEpochMs = null;
 /** @type {string|null} Surfaced feed error (e.g. CelesTrak outage) for the layer chip. */
 let _lastError = null;
 const _activeUpdateControllers = new Set();
@@ -261,6 +262,16 @@ function _notifyRowControls() {
   } catch (error) {
     console.warn('[Data:Satellites] row-controls listener failed:', error);
   }
+}
+
+function _computeNewestTleEpoch() {
+  let newest = null;
+  for (const sat of _catalog.values()) {
+    const epochMs = (sat.satrec?.jdsatepoch - 2440587.5) * 86400000;
+    if (!Number.isFinite(epochMs) || epochMs <= 0) continue;
+    if (newest === null || epochMs > newest) newest = epochMs;
+  }
+  return newest;
 }
 
 /**
@@ -1522,6 +1533,7 @@ const satellitesLayer = {
     _orbitPaths = new Map();
     _count = 0;
     _lastUpdate = null;
+    _newestTleEpochMs = null;
     _trackedNorad = null;
     _cancelPendingTrackingRestore();
     _trackedEntity = null;
@@ -1736,6 +1748,7 @@ const satellitesLayer = {
 
       _count = _points.size;
       _catalogRevision++;
+      _newestTleEpochMs = _computeNewestTleEpoch();
       _lastUpdate = Date.now();
       _lastPropagation = Date.now();
       _lastTrackingRefreshOutcome = {
@@ -1810,6 +1823,7 @@ const satellitesLayer = {
     _rowControlsListener = null;
     _count = 0;
     _lastUpdate = null;
+    _newestTleEpochMs = null;
     _lastError = null;
     _lastFocusUpdate = 0;
     _activeFocusCount = 0;
@@ -2169,10 +2183,18 @@ const satellitesLayer = {
 
   getStats() {
     const SAT_STALE_MS = 86_400_000;
-    const stale = _lastUpdate != null && (Date.now() - _lastUpdate) > SAT_STALE_MS;
+    const now = Date.now();
+    const receiptStale = _lastUpdate != null && (now - _lastUpdate) > SAT_STALE_MS;
+    const tleEpochStale = _newestTleEpochMs != null
+      && (now - _newestTleEpochMs) > SAT_STALE_MS;
+    const tleClockMissing = _lastUpdate != null && _newestTleEpochMs == null;
+    const tleClockFuture = _newestTleEpochMs != null
+      && _newestTleEpochMs > now + 30_000;
+    const stale = receiptStale || tleEpochStale || tleClockMissing || tleClockFuture;
     return {
       count: _count,
       lastUpdate: _lastUpdate,
+      newestTleEpochMs: _newestTleEpochMs,
       stale,
       status: _lastError === 'CelesTrak unreachable'
         ? 'unavailable'

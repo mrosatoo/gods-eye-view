@@ -156,6 +156,7 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
   let _dataSource = null;
   let _count = 0;
   let _lastUpdate = null;
+  let _feedGenerated = null;
   let _lastError = null;
   let _enabled = false;
 
@@ -172,6 +173,7 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
     viewer.dataSources.add(_dataSource);
     _count = 0;
     _lastUpdate = null;
+    _feedGenerated = null;
     _lastError = null;
     _enabled = false;
     overlayHost.setVisible(EARTHQUAKE_OVERLAY_SOURCE_ID, false);
@@ -208,6 +210,12 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
         _lastError = 'Malformed USGS response';
         return false;
       }
+
+      const rawGenerated = geojson?.metadata?.generated;
+      const now = Date.now();
+      _feedGenerated = Number.isFinite(rawGenerated) && rawGenerated > 0
+        && rawGenerated <= now + 30_000
+        ? rawGenerated : null;
 
       const nextEntities = [];
       let count = 0;
@@ -292,6 +300,7 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
     }
     _count = 0;
     _lastUpdate = null;
+    _feedGenerated = null;
     _lastError = null;
   },
 
@@ -329,10 +338,15 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
   },
 
   getStats() {
-    const stale = _lastUpdate != null && (Date.now() - _lastUpdate) > QUAKE_STALE_MS;
+    const now = Date.now();
+    const receiptStale = _lastUpdate != null && (now - _lastUpdate) > QUAKE_STALE_MS;
+    const feedClockStale = _feedGenerated != null && (now - _feedGenerated) > QUAKE_STALE_MS;
+    const feedClockMissing = _lastUpdate != null && _feedGenerated == null;
+    const stale = receiptStale || feedClockStale || feedClockMissing;
     return {
       count: _count,
       lastUpdate: _lastUpdate,
+      feedGenerated: _feedGenerated,
       stale,
       error: _lastError,
     };

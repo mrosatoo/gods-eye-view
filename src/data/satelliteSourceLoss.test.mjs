@@ -134,3 +134,53 @@ test('MF-14: shared proxy uses single-flight refresh per group', async () => {
   assert.match(source, /inflight|_inflight|inflightMap|_flights/i,
     'proxy deduplicates concurrent requests per group');
 });
+
+// ─── OSA-53 §1: TLE epoch staleness in getStats() ────────────────────────
+
+test('OSA-53: getStats source-code asserts stale when TLE epochs exceed SAT_STALE_MS', async () => {
+  const source = await readFile(new URL('./satellites.js', import.meta.url), 'utf8');
+  assert.match(source, /tleEpochStale/, 'getStats checks TLE epoch staleness');
+  assert.match(source, /tleClockMissing/, 'getStats checks missing TLE clock');
+  assert.match(source, /tleClockFuture/, 'getStats checks future TLE clock');
+  assert.match(source, /SAT_STALE_MS\s*=\s*86[_]?400[_]?000/,
+    'satellite stale threshold is 24 hours');
+});
+
+test('OSA-53: _computeNewestTleEpoch scans catalog and picks newest epoch', async () => {
+  const source = await readFile(new URL('./satellites.js', import.meta.url), 'utf8');
+  const fnMatch = source.match(/function _computeNewestTleEpoch[\s\S]*?^}/m);
+  assert.ok(fnMatch, '_computeNewestTleEpoch exists');
+  assert.match(fnMatch[0], /jdsatepoch/, 'reads TLE Julian epoch');
+  assert.match(fnMatch[0], /2440587\.5/, 'uses Julian-to-Unix conversion constant');
+  assert.match(fnMatch[0], /Number\.isFinite/, 'guards against non-finite epochs');
+  assert.match(fnMatch[0], /epochMs <= 0/, 'rejects non-positive epochs');
+});
+
+test('OSA-53: getStats stale derivation includes all four TLE signals', async () => {
+  const source = await readFile(new URL('./satellites.js', import.meta.url), 'utf8');
+  const statsBlock = source.slice(source.indexOf('getStats()'));
+  assert.match(statsBlock, /receiptStale \|\| tleEpochStale \|\| tleClockMissing \|\| tleClockFuture/,
+    'stale OR-chains all four conditions');
+});
+
+test('OSA-53: newestTleEpochMs is cleared in destroy()', async () => {
+  const source = await readFile(new URL('./satellites.js', import.meta.url), 'utf8');
+  const destroyBlock = source.slice(source.indexOf('destroy(viewer)'));
+  assert.match(destroyBlock, /_newestTleEpochMs\s*=\s*null/,
+    'destroy clears TLE epoch state');
+});
+
+test('OSA-53: newestTleEpochMs is computed before _lastUpdate in update()', async () => {
+  const source = await readFile(new URL('./satellites.js', import.meta.url), 'utf8');
+  const epochIdx = source.indexOf('_newestTleEpochMs = _computeNewestTleEpoch()');
+  const updateIdx = source.indexOf('_lastUpdate = Date.now()', epochIdx);
+  assert.ok(epochIdx > 0, 'epoch computation exists in update');
+  assert.ok(updateIdx > epochIdx, 'epoch computed before receipt timestamp');
+});
+
+test('OSA-53: getStats returns newestTleEpochMs in stats object', async () => {
+  const source = await readFile(new URL('./satellites.js', import.meta.url), 'utf8');
+  const statsBlock = source.slice(source.indexOf('getStats()'));
+  assert.match(statsBlock, /newestTleEpochMs:\s*_newestTleEpochMs/,
+    'stats exposes TLE epoch for consumers');
+});

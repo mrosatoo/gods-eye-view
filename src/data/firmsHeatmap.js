@@ -303,7 +303,8 @@ export function createFirmsHeatmapLayer({
       const now = Date.now();
       const FIRMS_STALE_MS = 7_200_000;
       const ageStale = _lastUpdate != null && (now - _lastUpdate) > FIRMS_STALE_MS;
-      const stale = _stale || ageStale;
+      const clockMissing = _count > 0 && _lastUpdate == null;
+      const stale = _stale || ageStale || clockMissing;
       const staleText = _lastUpdate ? `STALE · cached ${formatAge(now - _lastUpdate) || '<1h'}` : 'STALE';
       let loadingLabel = '';
       if (_loading) {
@@ -461,8 +462,10 @@ export function createFirmsHeatmapLayer({
       _cellCacheByGrid.clear(); // aggregation is per-dataset — new fires, new cells
       _firesByFrp = [..._fires].sort((a, b) => b.frp - a.frp);
       _count = _fires.length;
-      // Data age, not response age: a stale proxy payload truthfully reads old.
-      _lastUpdate = Number.isFinite(payload?.fetchedAt) ? payload.fetchedAt : null;
+      const rawFetchedAt = payload?.fetchedAt;
+      _lastUpdate = Number.isFinite(rawFetchedAt) && rawFetchedAt > 0
+        && rawFetchedAt <= Date.now() + 30_000
+        ? rawFetchedAt : null;
       // Settle the previous selection BEFORE the LOD rebuild. renderCurrentLod
       // runs refreshContextRegistrations(), which deletes every context record
       // not in the new top-N — including the one the store still points at.

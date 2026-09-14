@@ -50,7 +50,7 @@ async function fetchAndRender() {
     const res = await fetch('/api/emsc?minmag=4&limit=100', {
       signal: AbortSignal.timeout(15000),
     });
-    if (!res.ok) return;
+    if (!res.ok) { _lastError = `EMSC HTTP ${res.status}`; return; }
     const data = await res.json();
     const features = data?.features || [];
 
@@ -116,7 +116,10 @@ const emscQuakes = {
   },
   destroy() { this.disable(); _viewer = null; _lastUpdate = null; _lastError = null; },
   getStats() {
-    const stale = _lastUpdate != null && (Date.now() - _lastUpdate) > EMSC_STALE_MS;
+    const now = Date.now();
+    const receiptStale = _lastUpdate != null && (now - _lastUpdate) > EMSC_STALE_MS;
+    const clockMissing = _entities.length > 0 && _lastUpdate == null;
+    const stale = receiptStale || clockMissing;
     return {
       enabled: _enabled,
       count: _entities.length,
