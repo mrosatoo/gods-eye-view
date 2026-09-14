@@ -1,5 +1,39 @@
 # Triple Brain Build Status
 
+### Claude OSA-38 — TB6.1 Choke-Defaults (AIS+pills+density HUD) — 2026-09-14
+
+#### Implementation completed
+
+1. **Thesis defaults**: `ais-live-vessels` ON in `thesisDefaults.js`. Location pills for Hormuz/Suez/Bab/Malacca already exist with one-click fly-to.
+
+2. **Embed boot path** (`?welcome=0`): New `isEmbedBootPath()` + `runEmbedBoot()` in `firstRunExperience.js`. When `welcome=0` is in the URL, auto-enables AIS and flies to globe chokepoint overview so operators land on shipping density without the first-run launcher.
+
+3. **Choke Density HUD**: New `src/ui/chokeDensityHud.js` — compact overlay showing per-chokepoint vessel counts (Hormuz/Suez/Bab/Malacca) plus low-SOG candidate counts. Cyan/Gold theme. Honest labels: "low-SOG candidates", never "blocked" or "congested". Shows FEED DEGRADED when AIS feed is unhealthy. Auto-refreshes every 5s. Hidden in cockpit mode and clean view.
+
+4. **AISSTREAM_BOUNDING_BOXES**: Confirmed NOT supported server-side — skipped per spec.
+
+5. **Honest empty/degraded states**: Choke HUD hides when AIS disabled/empty; shows "FEED DEGRADED" label when feed has errors or is stale.
+
+#### Files changed
+
+- `src/ui/chokeDensityHud.js` — new: choke density HUD module
+- `src/ui/chokeDensityHud.test.mjs` — new: 17 tests (classify, format, render)
+- `src/ui/styles/choke-density.css` — new: Cyan/Gold themed HUD styles
+- `index.html` — added `#choke-density-hud` host element
+- `style.css` — added choke-density CSS import
+- `src/firstRunExperience.js` — added `isEmbedBootPath()`, `runEmbedBoot()`
+- `src/firstRunExperience.test.mjs` — added 7 embed boot tests
+- `src/standalone/startupChrome.js` — wired embed boot on `welcome=0`
+- `src/standalone/data.js` — wired choke density HUD lifecycle
+
+#### Verification
+
+- **24 new tests passed, 0 failed**: 17 vitest (chokeDensityHud), 7 node:test (embed boot path)
+- Pre-existing DOM-based first-run tests (4) require browser context — not impacted by these changes
+- No secrets committed
+
+---
+
 ### Claude OSA-42 — TB6 FULL FINISH live freshness + thesis clarity — 2026-09-14
 
 #### Freshness SLAs (production enforcement)
