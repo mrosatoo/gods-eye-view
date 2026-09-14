@@ -1,5 +1,27 @@
 # Triple Brain Build Status
 
+### Claude OSA-48 round 2 — integration defect fixes against actual module contracts — 2026-09-14
+
+Addresses four defects identified by Astra's 18c8028 recheck. All fixes target actual `DataLayerManager` and `aisLiveVesselsLayer` contracts verified via browser inspection.
+
+| Defect | Fix applied | Verification |
+|--------|-------------|--------------|
+| **Density: getStats() omits enabled** | `getStats()` now returns `enabled: state.enabled`. HUD uses `stats.enabled === true` instead of `count > 0` fallback. | HUD correctly shows enabled state even at count=0. |
+| **Density: getAllPositions strips _lowSogCandidate** | `getAllPositions()` output now includes `_lowSogCandidate: record._lowSogCandidate \|\| null`. | `rebuildCandidateCache` populates from real vessel records. |
+| **Density: footer says 0 vessels when coverage unknown** | Footer shows "Coverage unknown" when feed unavailable and no vessels present. | 2 new HUD tests covering unknown/mixed coverage. |
+| **Disruption: _getAisData reads entry not entry.module** | Unwraps `entry.module` from `DataLayerManager.layers.get()`; uses `this._dataManager.isEnabled()` for settled enabled state. | AIS data now flows through the disruption strip. |
+| **Disruption: disabled AIS renders as observed NONE** | Disabled AIS returns `null` (source_unavailable), not `{ vessels: [] }` (empty/NONE). | Disabled state no longer claims observed zero signals. |
+| **Source honesty: no observation timestamps, stale renders NOMINAL** | Each summarize function returns `observedAt` (newest observation timestamp). `resolveObservationStatus()` classifies as stale (>24h), future, or nominal. Section headers render observation age. Stale badge replaces NOMINAL. | 8 new tests: stale FIRMS, stale headlines, AIS observedAt, aggregate stale status, null observedAt. |
+| **Chokepoint: not wired from contextBindings** | AIS section header explicitly labels `GLOBAL` coverage when no chokepoint selected (default). | Honest scope label; no fake per-chokepoint filter. |
+
+**Tests:** 46 tests pass in the two directly affected test files (chokeDensityHud: 22, disruptionContext: 24). Full suite: 3291/3316 pass — same baseline as before changes (24 pre-existing failures unrelated to these modules). Zero new test failures.
+
+**Preserved fixes from round 1:** runEmbedBoot thesis-default clearing, PortWatch admission gating with null clocks, vitest→node:test migration, firstRunExperience assertion updates. All confirmed passing.
+
+**Not claimed:** Final Astra browser acceptance is not claimed. This section does not supersede Astra's rejection. [OSA-48](/OSA/issues/OSA-48) awaits Astra re-review on [OSA-41](/OSA/issues/OSA-41).
+
+---
+
 ### Claude OSA-49 — TB6.LIVE feed binding — 2026-09-14
 
 Proactive audit and binding of all five priority live layers. Connectivity tested from this deployment box.

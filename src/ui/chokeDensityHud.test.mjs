@@ -194,3 +194,23 @@ test('renderChokeDensityHud shows 0 low-SOG for zero observed candidates', () =>
   assert.ok(host.innerHTML.includes('0 low-SOG'));
   assert.ok(!host.innerHTML.includes('NO DATA'));
 });
+
+test('renderChokeDensityHud shows Coverage unknown when feed unavailable and no vessels', () => {
+  const rows = formatChokepointRows(new Map(), { feedAvailable: false });
+  const host = { hidden: true, innerHTML: '' };
+  renderChokeDensityHud(host, rows, { enabled: true, feedHealthy: false });
+  assert.ok(host.innerHTML.includes('Coverage unknown'));
+  assert.ok(!host.innerHTML.includes('0 vessels'));
+});
+
+test('renderChokeDensityHud shows vessel count when some vessels present even if some feeds unavailable', () => {
+  const rows = [
+    { key: 'hormuz', name: 'HORMUZ', total: 5, lowSog: 0, feedAvailable: true },
+    { key: 'suez', name: 'SUEZ', total: 0, lowSog: 0, feedAvailable: false },
+    { key: 'bab', name: 'BAB', total: 0, lowSog: 0, feedAvailable: false },
+    { key: 'malacca', name: 'MALACCA', total: 0, lowSog: 0, feedAvailable: false },
+  ];
+  const host = { hidden: true, innerHTML: '' };
+  renderChokeDensityHud(host, rows, { enabled: true, feedHealthy: true });
+  assert.ok(host.innerHTML.includes('5 vessels'));
+});

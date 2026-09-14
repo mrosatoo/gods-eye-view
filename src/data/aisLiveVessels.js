@@ -526,6 +526,7 @@ const aisLiveVesselsLayer = {
         position,
         latitude: record.lat,
         longitude: record.lon,
+        _lowSogCandidate: record._lowSogCandidate || null,
       });
     }
     return result;
@@ -650,6 +651,7 @@ const aisLiveVesselsLayer = {
     const waitingForFirstPosition = state.firstConnectPhase === 'loading';
     const newest = newestVesselFreshness();
     return {
+      enabled: state.enabled,
       count: state.count,
       lastUpdate: state.lastUpdate,
       loading: state.loading || waitingForFirstPosition,

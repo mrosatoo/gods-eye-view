@@ -43,14 +43,32 @@ export function filterEnergyCorridorFires(fires) {
   });
 }
 
+const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
+
+function resolveObservationStatus(newestMs) {
+  if (newestMs == null) return 'nominal';
+  const now = Date.now();
+  if (newestMs > now + 60_000) return 'future';
+  if (now - newestMs > STALE_THRESHOLD_MS) return 'stale';
+  return 'nominal';
+}
+
 export function summarizeFires(fires) {
   if (!Array.isArray(fires) || fires.length === 0) {
-    return { count: 0, cards: [], status: 'empty' };
+    return { count: 0, cards: [], status: 'empty', observedAt: null };
   }
   const corridorFires = filterEnergyCorridorFires(fires);
   if (corridorFires.length === 0) {
-    return { count: 0, cards: [], status: 'empty' };
+    return { count: 0, cards: [], status: 'empty', observedAt: null };
   }
+  let newestMs = null;
+  for (const f of corridorFires) {
+    const t = f.acq_datetime ? Date.parse(f.acq_datetime)
+      : f.acq_date ? Date.parse(f.acq_date) : null;
+    if (Number.isFinite(t) && (newestMs === null || t > newestMs)) newestMs = t;
+  }
+  const observedAt = newestMs != null ? new Date(newestMs).toISOString() : null;
+  const status = resolveObservationStatus(newestMs);
   const cards = corridorFires.slice(0, 5).map((f) => {
     const frp = Number.isFinite(f.frp) ? ` · FRP ${f.frp.toFixed(1)} MW` : '';
     const conf = typeof f.confidence === 'string' ? ` · ${f.confidence}` : '';
@@ -62,12 +80,12 @@ export function summarizeFires(fires) {
       source: 'NASA FIRMS',
     };
   });
-  return { count: corridorFires.length, cards, status: 'nominal' };
+  return { count: corridorFires.length, cards, status, observedAt };
 }
 
 export function summarizeQuakes(features) {
   if (!Array.isArray(features) || features.length === 0) {
-    return { count: 0, cards: [], status: 'empty' };
+    return { count: 0, cards: [], status: 'empty', observedAt: null };
   }
   const now = Date.now();
   const day = 24 * 60 * 60 * 1000;
@@ -75,6 +93,15 @@ export function summarizeQuakes(features) {
     const t = f?.properties?.time;
     return Number.isFinite(t) && (now - t) < day;
   });
+  if (recent.length === 0) {
+    return { count: 0, cards: [], status: 'empty', observedAt: null };
+  }
+  let newestMs = null;
+  for (const f of recent) {
+    const t = f?.properties?.time;
+    if (Number.isFinite(t) && (newestMs === null || t > newestMs)) newestMs = t;
+  }
+  const observedAt = newestMs != null ? new Date(newestMs).toISOString() : null;
   const sorted = recent.slice().sort((a, b) => (b.properties.mag || 0) - (a.properties.mag || 0));
   const cards = sorted.slice(0, 5).map((f) => {
     const p = f.properties;
@@ -90,13 +117,20 @@ export function summarizeQuakes(features) {
       source: 'USGS',
     };
   });
-  return { count: recent.length, cards, status: 'nominal' };
+  return { count: recent.length, cards, status: 'nominal', observedAt };
 }
 
 export function summarizeAisCandidates(vessels, chokepoint) {
   if (!Array.isArray(vessels) || vessels.length === 0) {
-    return { candidates: 0, clusters: [], cards: [], status: 'empty', chokepoint };
+    return { candidates: 0, clusters: [], cards: [], status: 'empty', chokepoint, observedAt: null };
   }
+  let newestMs = null;
+  for (const v of vessels) {
+    const t = v.sourceTimestamp ? Date.parse(v.sourceTimestamp) : null;
+    if (Number.isFinite(t) && (newestMs === null || t > newestMs)) newestMs = t;
+  }
+  const observedAt = newestMs != null ? new Date(newestMs).toISOString() : null;
+  const status_base = resolveObservationStatus(newestMs);
   const { candidates, clusters } = evaluateLowSog(vessels);
   const validCandidates = [...candidates.entries()]
     .filter(([, info]) => info.candidateType != null);
@@ -114,19 +148,31 @@ export function summarizeAisCandidates(vessels, chokepoint) {
     count: c.count,
     source: 'AIS',
   }));
+  const hasSignals = validCandidates.length > 0 || clusters.length > 0;
+  const status = status_base === 'stale' ? 'stale'
+    : status_base === 'future' ? 'stale'
+    : hasSignals ? 'nominal' : 'empty';
   return {
     candidates: validCandidates.length,
     clusters: clusters.length,
     cards: [...cards, ...clusterCards],
-    status: validCandidates.length > 0 || clusters.length > 0 ? 'nominal' : 'empty',
+    status,
     chokepoint,
+    observedAt,
   };
 }
 
 export function summarizeHeadlines(articles) {
   if (!Array.isArray(articles) || articles.length === 0) {
-    return { count: 0, cards: [], status: 'empty' };
+    return { count: 0, cards: [], status: 'empty', observedAt: null };
   }
+  let newestMs = null;
+  for (const a of articles) {
+    const t = a.publishedAt ? Date.parse(a.publishedAt) : null;
+    if (Number.isFinite(t) && (newestMs === null || t > newestMs)) newestMs = t;
+  }
+  const observedAt = newestMs != null ? new Date(newestMs).toISOString() : null;
+  const status = resolveObservationStatus(newestMs);
   const cards = articles.slice(0, 3).map((a) => ({
     type: 'headline',
     label: typeof a.title === 'string' ? a.title.slice(0, 120) : 'Untitled',
@@ -135,7 +181,7 @@ export function summarizeHeadlines(articles) {
     publishedAt: a.publishedAt || null,
     source: a.source || a.domain || 'RSS',
   }));
-  return { count: articles.length, cards, status: 'nominal' };
+  return { count: articles.length, cards, status, observedAt };
 }
 
 export function aggregateDisruptionContext({
@@ -147,16 +193,16 @@ export function aggregateDisruptionContext({
 } = {}) {
   const fireSummary = fires != null
     ? summarizeFires(fires)
-    : { count: 0, cards: [], status: 'source_unavailable' };
+    : { count: 0, cards: [], status: 'source_unavailable', observedAt: null };
   const quakeSummary = quakeFeatures != null
     ? summarizeQuakes(quakeFeatures)
-    : { count: 0, cards: [], status: 'source_unavailable' };
+    : { count: 0, cards: [], status: 'source_unavailable', observedAt: null };
   const aisSummary = aisVessels != null
     ? summarizeAisCandidates(aisVessels, chokepoint)
-    : { candidates: 0, clusters: 0, cards: [], status: 'source_unavailable', chokepoint };
+    : { candidates: 0, clusters: 0, cards: [], status: 'source_unavailable', chokepoint, observedAt: null };
   const headlineSummary = headlines != null
     ? summarizeHeadlines(headlines)
-    : { count: 0, cards: [], status: 'source_unavailable' };
+    : { count: 0, cards: [], status: 'source_unavailable', observedAt: null };
 
   const allCards = [
     ...fireSummary.cards,
@@ -165,15 +211,16 @@ export function aggregateDisruptionContext({
     ...headlineSummary.cards,
   ];
 
-  const sourceCount = [fireSummary, quakeSummary, aisSummary, headlineSummary]
-    .filter((s) => s.status === 'nominal').length;
-  const unavailableCount = [fireSummary, quakeSummary, aisSummary, headlineSummary]
-    .filter((s) => s.status === 'source_unavailable').length;
+  const summaries = [fireSummary, quakeSummary, aisSummary, headlineSummary];
+  const unavailableCount = summaries.filter((s) => s.status === 'source_unavailable').length;
+  const staleCount = summaries.filter((s) => s.status === 'stale' || s.status === 'future').length;
+  const nominalCount = summaries.filter((s) => s.status === 'nominal').length;
 
   let overallStatus = 'nominal';
   if (unavailableCount === 4) overallStatus = 'source_unavailable';
-  else if (sourceCount === 0 && unavailableCount < 4) overallStatus = 'empty';
-  else if (unavailableCount > 0) overallStatus = 'partial';
+  else if (nominalCount === 0 && staleCount === 0 && unavailableCount < 4) overallStatus = 'empty';
+  else if (staleCount > 0 && nominalCount === 0) overallStatus = 'stale';
+  else if (unavailableCount > 0 || staleCount > 0) overallStatus = 'partial';
 
   return {
     fires: fireSummary,

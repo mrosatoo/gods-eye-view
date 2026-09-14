@@ -160,3 +160,73 @@ test('aggregateDisruptionContext reports empty when sources present but no data'
   });
   assert.equal(result.status, 'empty');
 });
+
+test('summarizeFires returns observedAt from acq_datetime', () => {
+  const fires = [{ lat: 26, lon: 56, frp: 10, acq_datetime: '2026-09-14T08:00:00Z' }];
+  const result = summarizeFires(fires);
+  assert.equal(result.observedAt, '2026-09-14T08:00:00.000Z');
+});
+
+test('summarizeFires marks stale when observation > 24h old', () => {
+  const old = new Date(Date.now() - 48 * 3600 * 1000).toISOString();
+  const fires = [{ lat: 26, lon: 56, frp: 10, acq_datetime: old }];
+  const result = summarizeFires(fires);
+  assert.equal(result.status, 'stale');
+  assert.ok(result.observedAt);
+});
+
+test('summarizeFires returns null observedAt when no timestamps present', () => {
+  const fires = [{ lat: 26, lon: 56, frp: 10 }];
+  const result = summarizeFires(fires);
+  assert.equal(result.observedAt, null);
+  assert.equal(result.status, 'nominal');
+});
+
+test('summarizeQuakes returns observedAt from most recent quake', () => {
+  const now = Date.now();
+  const features = [
+    { properties: { mag: 3.0, time: now - 2000, place: 'A' }, geometry: { coordinates: [10, 20] } },
+    { properties: { mag: 5.0, time: now - 1000, place: 'B' }, geometry: { coordinates: [30, 40] } },
+  ];
+  const result = summarizeQuakes(features);
+  assert.ok(result.observedAt);
+  assert.ok(Math.abs(Date.parse(result.observedAt) - (now - 1000)) < 2);
+});
+
+test('summarizeHeadlines marks stale when publishedAt > 24h old', () => {
+  const old = new Date(Date.now() - 48 * 3600 * 1000).toISOString();
+  const articles = [{ title: 'Old news', publishedAt: old }];
+  const result = summarizeHeadlines(articles);
+  assert.equal(result.status, 'stale');
+  assert.ok(result.observedAt);
+});
+
+test('summarizeAisCandidates carries observedAt from sourceTimestamp', () => {
+  const ts = new Date(Date.now() - 5000).toISOString();
+  const vessels = [
+    { mmsi: '111', lat: 26, lon: 56, sog: 0.1, sourceTimestamp: ts },
+  ];
+  const result = summarizeAisCandidates(vessels, 'hormuz');
+  assert.equal(result.observedAt, ts);
+});
+
+test('aggregateDisruptionContext reports stale when all sources stale', () => {
+  const old = new Date(Date.now() - 48 * 3600 * 1000).toISOString();
+  const result = aggregateDisruptionContext({
+    fires: [{ lat: 26, lon: 56, frp: 10, acq_datetime: old }],
+    quakeFeatures: [],
+    aisVessels: [],
+    headlines: [{ title: 'Old', publishedAt: old }],
+  });
+  assert.equal(result.fires.status, 'stale');
+  assert.equal(result.headlines.status, 'stale');
+  assert.equal(result.status, 'stale');
+});
+
+test('aggregateDisruptionContext each source carries observedAt', () => {
+  const result = aggregateDisruptionContext();
+  assert.equal(result.fires.observedAt, null);
+  assert.equal(result.quakes.observedAt, null);
+  assert.equal(result.ais.observedAt, null);
+  assert.equal(result.headlines.observedAt, null);
+});

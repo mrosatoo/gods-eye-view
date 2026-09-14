@@ -124,10 +124,15 @@ export function renderChokeDensityHud(host, rows, { enabled = false, feedHealthy
   }
 
   html += '</div>';
+  const anyUnavailable = rows.some((r) => r.feedAvailable === false);
   html += '<div class="choke-hud-footer">';
-  html += `<span>${totalVessels} vessels in chokepoints</span>`;
-  if (totalCandidates > 0) {
-    html += `<span class="choke-hud-footer-alert">${totalCandidates} candidate${totalCandidates !== 1 ? 's' : ''}</span>`;
+  if (anyUnavailable && totalVessels === 0) {
+    html += '<span>Coverage unknown</span>';
+  } else {
+    html += `<span>${totalVessels} vessels in chokepoints</span>`;
+    if (totalCandidates > 0) {
+      html += `<span class="choke-hud-footer-alert">${totalCandidates} candidate${totalCandidates !== 1 ? 's' : ''}</span>`;
+    }
   }
   html += '</div>';
 
@@ -165,10 +170,9 @@ export function createChokeDensityHud({ aisLayer, host }) {
   function update() {
     if (destroyed || !host) return;
     const stats = aisLayer.getStats?.() || {};
-    const enabled = typeof aisLayer.isEnabled === 'function'
-      ? aisLayer.isEnabled() : stats.count > 0 || stats.enabled === true;
+    const enabled = stats.enabled === true;
     const feedHealthy = !stats.error && !stats.stale;
-    const feedAvailable = stats.count > 0;
+    const feedAvailable = enabled && stats.status !== 'unavailable' && stats.count > 0;
 
     if (!enabled) {
       renderChokeDensityHud(host, [], { enabled: false });

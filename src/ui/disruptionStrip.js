@@ -44,6 +44,7 @@ function statusCssClass(status) {
   switch (status) {
     case 'nominal': return 'disruption-status-nominal';
     case 'partial': return 'disruption-status-partial';
+    case 'stale': return 'disruption-status-stale';
     case 'source_unavailable': return 'disruption-status-unavailable';
     case 'empty': return 'disruption-status-empty';
     default: return '';
@@ -54,10 +55,24 @@ function statusText(status) {
   switch (status) {
     case 'nominal': return 'NOMINAL';
     case 'partial': return 'PARTIAL';
+    case 'stale': return 'STALE';
     case 'source_unavailable': return 'SOURCES UNAVAILABLE';
     case 'empty': return 'NO SIGNALS';
     default: return 'UNKNOWN';
   }
+}
+
+function formatObservedAt(isoString) {
+  if (!isoString) return null;
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return null;
+  const now = Date.now();
+  const ageMs = now - d.getTime();
+  if (ageMs < 0) return 'future date';
+  if (ageMs < 60_000) return 'just now';
+  if (ageMs < 3600_000) return `${Math.floor(ageMs / 60_000)}m ago`;
+  if (ageMs < 86400_000) return `${Math.floor(ageMs / 3600_000)}h ago`;
+  return d.toISOString().slice(0, 10);
 }
 
 function renderSectionHeader(title, summary) {
@@ -66,6 +81,8 @@ function renderSectionHeader(title, summary) {
   const badge = el('span', `disruption-section-badge ${statusCssClass(summary.status)}`);
   if (summary.status === 'source_unavailable') {
     badge.textContent = 'UNAVAILABLE';
+  } else if (summary.status === 'stale') {
+    badge.textContent = 'STALE';
   } else if (summary.status === 'empty') {
     badge.textContent = 'NONE';
   } else {
@@ -73,6 +90,10 @@ function renderSectionHeader(title, summary) {
     badge.textContent = String(count);
   }
   row.appendChild(badge);
+  const age = formatObservedAt(summary.observedAt);
+  if (age) {
+    row.appendChild(el('span', 'disruption-section-observed', age));
+  }
   return row;
 }
 
@@ -105,10 +126,13 @@ export function renderDisruptionStrip(context) {
   header.appendChild(statusEl);
   container.appendChild(header);
 
+  const aisScope = context.ais?.chokepoint
+    ? `AIS CANDIDATES · ${String(context.ais.chokepoint).toUpperCase()}`
+    : 'AIS CANDIDATES · GLOBAL';
   const sections = [
     { key: 'fires', title: 'NRT DETECTIONS', label: 'FIRMS NRT detections' },
     { key: 'quakes', title: 'EARTHQUAKES 24H', label: 'USGS earthquakes' },
-    { key: 'ais', title: 'AIS CANDIDATES', label: 'AIS low-SOG candidates' },
+    { key: 'ais', title: aisScope, label: 'AIS low-SOG candidates' },
     { key: 'headlines', title: 'HEADLINES', label: 'Headline signal' },
   ];
 
@@ -222,14 +246,14 @@ export class DisruptionStripController {
 
   _getAisData() {
     if (!this._dataManager) return null;
-    const aisLayer = this._dataManager.layers?.get?.('ais-live-vessels');
-    if (!aisLayer) return null;
-    const enabled = typeof aisLayer.isEnabled === 'function'
-      ? aisLayer.isEnabled() : true;
-    if (!enabled) return { vessels: [], chokepoint: this._chokepoint ?? null };
-    if (!aisLayer.getAnalystRecords) return null;
+    const entry = this._dataManager.layers?.get?.('ais-live-vessels');
+    if (!entry) return null;
+    const aisModule = entry.module;
+    const enabled = this._dataManager.isEnabled('ais-live-vessels');
+    if (!enabled) return null;
+    if (typeof aisModule?.getAnalystRecords !== 'function') return null;
     try {
-      const records = aisLayer.getAnalystRecords(5000);
+      const records = aisModule.getAnalystRecords(5000);
       const vessels = records.map((r) => ({
         mmsi: r.mmsi,
         lat: r.lat,
