@@ -49,14 +49,27 @@ export function normalizeRegionalArticles(payload, limit = MAX_ARTICLES) {
     seen.add(signature);
     const rawDate = cleanText(row?.seendate, 32);
     const compactDate = /^(\d{8})T(\d{6})Z$/.exec(rawDate);
-    const publishedAt = compactDate
+    const candidate = compactDate
       ? `${compactDate[1].slice(0, 4)}-${compactDate[1].slice(4, 6)}-${compactDate[1].slice(6, 8)}T${compactDate[2].slice(0, 2)}:${compactDate[2].slice(2, 4)}:${compactDate[2].slice(4, 6)}Z`
-      : Number.isNaN(Date.parse(rawDate)) ? null : new Date(rawDate).toISOString();
+      : rawDate;
+    // Reject invalid/zone-naive discovery clocks; never invent publication time.
+    const timestamp = /T.*(?:Z|[+-]\d{2}:?\d{2})$/i.test(candidate)
+      ? Date.parse(candidate) : NaN;
+    const discoveredAt = Number.isFinite(timestamp)
+      && (!compactDate || new Date(timestamp).toISOString().slice(0, 19) === candidate.slice(0, 19))
+      ? new Date(timestamp).toISOString() : null;
     articles.push({
       title,
       url,
       domain: cleanText(row?.domain || new URL(url).hostname.replace(/^www\./, ''), 80),
-      publishedAt,
+      discoveredAt,
+      publishedAt: null,
+      eventAt: null,
+      publicationTimeBasis: null,
+      // A headline family is a grouping hint, never independent corroboration.
+      headlineFamily: title.toLowerCase(),
+      verificationStatus: 'unverified',
+      correctionStatus: 'unknown',
       sourceCountry: cleanText(row?.sourcecountry, 60) || null,
     });
     if (articles.length >= Math.max(1, Math.min(MAX_ARTICLES, limit))) break;

@@ -26,7 +26,9 @@ test('normalizes, deduplicates, and rejects unsafe regional-news rows', () => {
     { title: 'Second story', url: 'https://other.example/story', seendate: '2026-07-22T07:00:00Z' },
   ] });
   assert.equal(articles.length, 2);
-  assert.equal(articles[0].publishedAt, '2026-07-22T08:15:00Z');
+  assert.equal(articles[0].publishedAt, null);
+  assert.equal(articles[0].eventAt, null);
+  assert.equal(articles[0].discoveredAt, '2026-07-22T08:15:00.000Z');
   assert.equal(articles[1].domain, 'other.example');
 });
 
@@ -60,4 +62,31 @@ test('regional distance handles nearby movement and missing positions', () => {
   );
   assert.ok(distance > 11000 && distance < 11200);
   assert.equal(regionalDistanceM(null, null), Infinity);
+});
+
+test('rediscovery and syndicated headlines never become fresh events or corroboration', () => {
+  const rows = [
+    { title: 'Unconfirmed report', url: 'https://original.example/a', seendate: '20200101T000000Z' },
+    { title: 'Unconfirmed report', url: 'https://copy.example/a', seendate: '20260913T120000Z' },
+  ];
+  const articles = normalizeRegionalArticles({ articles: rows });
+  assert.equal(articles.length, 2);
+  assert.equal(articles[0].headlineFamily, articles[1].headlineFamily);
+  assert.deepEqual(articles.map(a => a.url), rows.map(a => a.url));
+  for (const article of articles) {
+    assert.equal(article.publishedAt, null);
+    assert.equal(article.eventAt, null);
+    assert.equal(article.verificationStatus, 'unverified');
+    assert.equal(article.correctionStatus, 'unknown');
+  }
+});
+
+test('missing, invalid and zone-naive index clocks remain unknown', () => {
+  for (const seendate of [null, 'bad', '20260230T120000Z', '20261301T120000Z', '2026-09-13T12:00:00']) {
+    const [article] = normalizeRegionalArticles({ articles: [
+      { title: 'Report', url: 'https://example.com/a', seendate },
+    ] });
+    assert.equal(article.discoveredAt, null);
+    assert.equal(article.publishedAt, null);
+  }
 });

@@ -50,6 +50,12 @@ function normalizeRssArticles(xml, limit = 5) {
       publishedAt: Number.isNaN(Date.parse(rawDate))
         ? null
         : new Date(rawDate).toISOString(),
+      publicationTimeBasis: 'RSS pubDate',
+      discoveredAt: null,
+      eventAt: null,
+      headlineFamily: title.toLowerCase(),
+      verificationStatus: 'unverified',
+      correctionStatus: 'unknown',
       sourceCountry: null,
     });
     if (articles.length >= limit) break;

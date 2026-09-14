@@ -1,5 +1,89 @@
 # Triple Brain Build Status
 
+### Astra SHIP residual risks — 2026-09-14 (OSA-33)
+
+- **Post-ship review pending:** Claude's [OSA-32](/OSA/issues/OSA-32) is in progress with no ship comments at this check. This is a baseline residual review, not acceptance of its eventual ship notes. OSA-33 depends on OSA-32; Astra owns the post-completion recheck.
+- **No-fake-gauges claim remains qualified:** `src/styles/thermal.js:261-298` computes `20 + centerLuma * 30` and paints temperature digits plus a degree symbol. `index.html:513` discloses simulation in the FLIR selector tooltip, but that does not turn the displayed number into measured temperature. Shader is registered in `src/ui/visualPresets.js`. Static evidence only; no fresh screenshot or claim of default-mode exposure. Before unconditional honesty acceptance, remove the pseudo-temperature or make its synthetic/non-measurement status persistent beside the readout. Application changes are outside this residual-only assignment.
+- **PortWatch remains unavailable, dated-only:** overlay labels distinguish missing data from zero and use observation date / “Daily Activity (dated)”. Proxy still returns admission-pending with null activity values and observation date. Its `fetchedAt` is response/cache generation time, not a successful source fetch; earlier blanket “null fetch clock” claims in this document do not describe current PortWatch code. No real daily activity, live congestion, queue, or dwell-time validation is established.
+- **FIRMS/CelesTrak constraints preserved:** NRT/product/acquisition/support/stale labels and non-ordinal co-located cycling remain; two-hour persisted cooldown, retained aged TLEs, original element epoch and unsupported-ID exclusion remain. Fresh focused verification: **31 tests passed, zero failed** across `firmsCards`, `firmsColocatedAccess`, `satelliteProvenance`, `spaceProviders`, and `researchAdmission`. These are unit/provider checks, not a rerun of prior browser acceptance or live upstream certification; shared serving proxy only, distributed replicas unverified.
+- **Remaining scope limits:** AIS key-dependent live candidate verification, Phase B deferral and production Node/proxy deployment remain separate ship limitations. MF-11 still suppresses all four pending research routes in dev/preview with 503 and null clocks; no new Research Intake. Prior MF-14/15/16 acceptance remains historical bounded evidence, not full-product no-fake-precision sign-off.
+
+
+### Claude OSA-32 — First Ship alpha-stable — 2026-09-14
+
+#### Reachability confirmed
+
+- GEV `:4173` → HTTP 200
+- Desk `/god-eye` → HTTP 200
+- Badge: "Reachable · GEV / God Eye View" (not "LIVE")
+- Both services running on owned branch `cursor/god-eye-owned-basis`
+
+#### Committed in this pass
+
+- **CSS import order fix**: moved component `@import` rules to the top of `style.css` so they load before theme token overrides. Controls and tactical cards now render visibly.
+- **MF-16 regional news honesty repair**: GDELT `seendate` → `discoveredAt`; `publishedAt` and `eventAt` remain null until independently evidenced. RSS retains explicit `pubDate` basis. Headline family hints label possible syndication; separate outlet links never treated as independent confirmation. UI labels EVENT TIME UNKNOWN, UNVERIFIED, CORRECTIONS UNKNOWN, and PUBLICATION UNKNOWN or REPORTED PUBLICATION as appropriate.
+- **QA script improvements**: MF-14/15 browser fixtures dismiss first-run dialog, assert ISS tracked readout with original TLE epoch under total outage, assert PARTIAL source support and rendered acquisition/product on co-located FIRMS cards.
+- **Regional honesty QA script**: `scripts/qa-regional-honesty.mjs` exercises the production renderer for original, syndicated, unknown-clock, and RSS publication scenarios.
+
+#### Verification
+
+- 78 thesis tests + 133 layer/vessel tests = **211 tests passed, 0 failed**
+- `npx vite build`: succeeded, 0 errors
+- `git diff --check`: no whitespace violations
+- No secrets committed
+
+#### Honest remaining
+
+| Item | Owner | Status | Notes |
+|------|-------|--------|-------|
+| AIS key for live vessel + low-SOG candidate | Osato (env) | Not yet set | Requires `AISSTREAM_API_KEY` in `.env` |
+| Phase B: bounded history, dwell-time, queue length | Claude | Deferred | Per Approve #1 |
+| Prod deploy: Railway/Render/Fly.io with reverse proxy | Osato | Not started | GEV needs persistent Node process; Vercel/static insufficient |
+| MF-11 research intake admission evidence | Claude | Gated 503 | No new sources admitted |
+| PortWatch §4.2 source admission | Claude | Unavailable | Proxy returns explicit `source_unavailable` |
+| Distributed replica / live-upstream certification | — | Out of scope | Single serving proxy verified only |
+| FLIR pseudo-temperature honesty | Claude | Open | Astra OSA-33 identified: synthetic readout needs persistent disclosure or removal |
+
+#### Approve #2 Checklist — Alpha Ship Sign-off
+
+| # | Gate | Evidence | Status |
+|---|------|----------|--------|
+| 1 | GEV :4173 serves 200 | `curl` HTTP 200 | PASS |
+| 2 | Desk /god-eye serves 200 | `curl` HTTP 200 | PASS |
+| 3 | Badge says "Reachable" not "LIVE" | GodEyeClient.tsx code | PASS |
+| 4 | Thesis chip visible | "Lagebild only · never feeds Conf" | PASS |
+| 5 | All thesis tests pass (≥200) | 211 passed, 0 failed | PASS |
+| 6 | Build succeeds | `npx vite build` 0 errors | PASS |
+| 7 | No secrets in repo | `.env` gitignored | PASS |
+| 8 | MF-14/15/16 accepted | Astra OSA-26 bounded acceptance | PASS |
+| 9 | MF-16 honesty repair | discoveredAt ≠ publishedAt | PASS |
+| 10 | CSS controls render | @imports before theme tokens | PASS |
+| 11 | MF-11 research gate active | 4 routes return 503 | PASS |
+| 12 | No Hatch/Conf/Edge/Sit code | Isolation verified | PASS |
+| 13 | AIS defaults on | URL param `l=a` | PASS |
+| 14 | Source-age gate (MF-1/2) | `CANDIDATE_MAX_AGE_MS=300000` | PASS |
+| 15 | MF-4 cluster dedup | MMSI dedup before clustering | PASS |
+
+**Remaining for Approve #3 (prod):** AIS key set and live vessels observed, prod deploy on Railway/Render, `GEV_FRAME_ANCESTORS` set to prod Desk origin, FLIR pseudo-temperature honesty resolution, Phase B scope.
+
+---
+
+### Astra final integration acceptance — 2026-09-13 (OSA-26)
+
+**MF-14/15/16 closed within the approved existing-source scope.** This disposition supersedes earlier partial/blocked and premature acceptance entries below.
+
+- Root cause of missing UI found and repaired: style.css placed component @imports after ordinary rules. Moved imports to the beginning, preserving their relative order and keeping theme overrides afterward. The real controls and tactical cards now render visibly. This was a stylesheet defect, not faint SwiftShader text.
+- Browser fixtures now click the real first-run Explore manually button and wait for dismissal before testing pointer interaction. Initial runs exposed the blocking dialog; an incorrect selector/wait was corrected before the final passing runs.
+- MF-14: 21 Chromium checks pass. Real production load/refresh, DOM layer states nominal/degraded/unavailable, six retained satellites after total outage, and tracked ISS readout preserving the original 2026-09-13T12:00Z TLE epoch. Total-outage screenshot visually inspected: readable ISS card with PROPAGATED, altitude, NORAD and original epoch.
+- MF-15: 20 Chromium checks pass. Actual pointer clicks access N21 then N20 at the same coordinate; both cards show acquisition age, distinct NRT product and PARTIAL 1/3 support. After real key-loss refresh exactly two distinct detections remain, both stale/key-required, with products retained. First/second sensor and source-loss screenshots visually inspected: readable tactical cards. Six focused co-location tests also pass, including three-member round-robin and accurate non-ordinal label.
+- MF-16: prior repair and verified production-renderer evidence retained: discovery differs from unknown publication/event time, attribution survives, possible syndication is not independent confirmation, RSS publication basis explicit. Prior 17 regional/proxy/admission checks and Chromium renderer acceptance are historical evidence, not rerun here.
+- CelesTrak two-hour cooldown, original epochs, unsupported-ID exclusion and FIRMS NRT preserved. No new Research Intake without MF-11. Shared serving proxy only; no distributed-replica or live-upstream availability certification. This is bounded MF-14/15/16 acceptance, not a full workspace/all-phase sign-off.
+- No new service started, deployment, commit or push. Reused the existing reachable localhost:4176 service; current issue has no execution workspace ID. Source handoff and screenshots are uploaded artifacts, not a published preview.
+- Final disposition: done after artifact upload and verified Paperclip status write. BUILD-STATUS and source archive provide the final handoff.
+
+---
+
+
 ### Claude OSA-28 rev 2 — MF-14/15 browser acceptance repairs — 2026-09-13
 
 Addresses all review feedback from Astra integration review (OSA-26). Preserves completed work from commit 5c6c7dd.

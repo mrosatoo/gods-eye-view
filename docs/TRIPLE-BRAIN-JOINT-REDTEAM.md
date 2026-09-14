@@ -1,6 +1,6 @@
 # Triple Brain Joint Red-Team — Astra
 
-**Date:** 2026-09-13 · **Pass:** 2, FULL GO intake / pre-implementation-SPEC · **Disposition:** changes required before build approval; joint-SPEC review pending.
+**Date:** 2026-09-13 · **Current disposition:** revision-specific document review complete; product acceptance remains open. See §10 for the current review. Earlier passes below are historical evidence.
 
 ## 1. Review boundary and verdict
 
@@ -291,3 +291,32 @@ A new deterministic invocation of production `evaluateLowSog()` used `nowMs = Da
 Required closure, Claude implementation / Astra review: select one authoritative usable report per MMSI before geographic membership, candidate evaluation and clustering. Define tie/conflict and out-of-order behavior explicitly; use the declared rule for denominator counts as well. Add older-slow/newer-fast and older-fast/newer-slow permutations, equal-time conflicts, cross-zone movement and four/five unique-vessel boundaries. If the evaluator instead requires pre-normalized unique inputs, enforce and test that precondition at every caller rather than silently producing unsupported candidates.
 
 Acceptance remains open. The previous 81-test result remains historical evidence and was not rerun. This pass ran the four small fixtures above only. The named follow-up is a proposed owner/action, not a scheduled child issue. Publishing and scheduling still require restored run-bound authentication; the board-authorized workspace review is the deliverable for this fallback pass.
+
+
+## 10. Rev 3 review closure — 2026-09-13
+
+Reviewed Joint Spec Rev 3, SHA-256 `16276d71278ac1ec477ea79e144a03132e85103bd08430a86282ad485aef903b`, against Lenkung, both theses, Approve #1 and the earlier findings above. This closes the document-review deliverable for [OSA-4](/OSA/issues/OSA-4). It does not grant product acceptance, undo Approve #1, or certify current runtime behavior. No provider request, application change or runtime test was performed in this pass.
+
+| Findings | Rev 3 evidence | Document assessment |
+|---|---|---|
+| RT-01–02 | §§8.1–8.5 and Appendix D A1–A2 separate clocks, regional silence and reachability | Contract present; runtime acceptance remains separate. |
+| RT-03–04 | §§5.4–5.5 impose Level 1 and no temporal claims, but §5.3 says “Low SOG · Dwell candidate” | Partial: instantaneous first-ship copy must say “Low SOG candidate”; dwell needs temporal support. |
+| RT-05 | §§4.7, 8.4, Appendix D A5 specify fixed zones, truncation and unique populations | Contract present; authoritative report selection and overlap boundaries need implementation evidence. Prior §9 is historical, not a fresh failure reproduction. |
+| RT-06 | §4.2 requires source admission and unavailable fallback; §4.4 still has a placeholder endpoint and underspecified comparator | Safe only while unsupported integration/comparison stays unavailable. Do not interpret the diagram's average or percentage as admitted data. |
+| RT-07–08 | §§6–7 preserve land context and unavailable truck/water metrics; Appendix A defers claims | Contract present with suppression. Existing regional-news clock/family defect in §8 remains a separate implementation acceptance item. |
+| RT-09–10 | §§9, 11–12 and Appendix D A9–A10 define adjacent uncertainty and actual Desk/degradation checks | Test requirements present; no new screenshot, deployment or end-to-end pass established here. |
+| RT-11 | Opening gate notice explicitly overrides B.1b; §3 and B.1b retain admitted-language rows | Partial: notice prevents admission inference, but tables should be reconciled. No gate removal or source-rights verdict follows from this review. |
+| RT-12–13 | Appendix A and Appendix D A12–A13 require acquisition/visibility, geographic scope and forecast/expiry distinctions | Conditional/deferred; admission and fixtures remain prerequisites. |
+| MF-14–16 | Earlier review and BUILD-STATUS record narrower CelesTrak/FIRMS tests and regional-news gaps | Product acceptance remains owned by [OSA-26](/OSA/issues/OSA-26), which was already active in another run. Historical test counts were not rerun or upgraded. |
+
+Verification: checked the reviewed spec fingerprint and local Markdown file targets; confirmed the document contains RT-01–RT-16 and MF-1–MF-16. This review completes MF-10's publication/revision-review requirement only. All other acceptance checkboxes retain their evidence requirements.
+
+### MUST-FIX before final product acceptance
+
+Approve #1 already authorizes implementation; this list governs acceptance, not a new permission request.
+
+- Reconcile §5.3 with the Level 1 ceiling: low-SOG-only first-ship copy; no unsupported dwell inference.
+- Reconcile admitted-language tables with MF-11 suppression. Preserve explicit unavailable states until the required admission evidence exists.
+- Keep PortWatch comparisons unavailable until dataset mapping, comparator dates, valid sample minimum, zero-denominator suppression and comparable scope are explicit and verified.
+- Preserve source-time, missingness, candidate and land-context contracts through normal/degraded Desk QA; an isolated fixture or reachable globe does not certify them.
+- Close MF-14/15/16 with actual orbital source-loss/readout evidence, operator access to co-located FIRMS detections, and regional-news time/family preservation. Continue these in [OSA-26](/OSA/issues/OSA-26); this review does not take over that active run.

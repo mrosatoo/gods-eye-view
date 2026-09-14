@@ -63,6 +63,7 @@ function colocatedPayload() {
     sources: [
       { source: 'VIIRS_NOAA20_NRT', count: 1, ok: true },
       { source: 'VIIRS_NOAA21_NRT', count: 1, ok: true },
+      { source: 'VIIRS_SNPP_NRT', count: 0, ok: false },
     ],
     count: 2,
     fires: [
@@ -79,6 +80,9 @@ async function bootAndEnable(page, { timeoutS = 30 } = {}) {
     { timeout: 60000 },
   );
   await sleep(1500);
+  await page.waitForSelector('#first-run-launcher:not([hidden])', { timeout: 30000 });
+  await page.click('[data-first-run-choice="explore"]');
+  await page.waitForSelector('#first-run-launcher', { hidden: true, timeout: 10000 });
   return page.evaluate(async (tS) => {
     const dm = window.__godsEyeView.dataManager;
     await dm.setEnabled('local-firms', true);
@@ -306,7 +310,7 @@ async function main() {
           card1.product === 'VIIRS_NOAA20_NRT' || card1.product === 'VIIRS_NOAA21_NRT',
           `product=${card1.product}`);
         record('CYCLE: first selection has source support',
-          typeof card1.sourceSupport === 'string' && card1.sourceSupport.length > 0,
+          /PARTIAL/.test(card1.sourceSupport),
           `sourceSupport=${card1.sourceSupport}`);
 
         // Verify the selected card's accessibility button is updated
@@ -316,6 +320,10 @@ async function main() {
           pressedBtn != null,
           `pressed=${pressedBtn?.label?.slice(0, 80) || 'none'}`);
 
+        record('CYCLE: first rendered card has acquisition and product',
+          /acquired/.test(pressedBtn?.label) && pressedBtn.label.includes(card1.product),
+          pressedBtn?.label);
+        await page.screenshot({ path: path.join(SHOTS_DIR, 'mf15-first-sensor.png') });
         const card1Id = card1.id;
         const card1Product = card1.product;
 
@@ -333,9 +341,13 @@ async function main() {
           record('CYCLE: cycled detection has distinct product',
             card2.product !== card1Product && (card2.product === 'VIIRS_NOAA20_NRT' || card2.product === 'VIIRS_NOAA21_NRT'),
             `product1=${card1Product} product2=${card2.product}`);
-          record('CYCLE: cycled detection has acquisition time',
-            typeof card2.sourceSupport === 'string' && card2.sourceSupport.length > 0,
+          record('CYCLE: cycled detection preserves partial source support',
+            /PARTIAL/.test(card2.sourceSupport),
             `sourceSupport=${card2.sourceSupport}`);
+          const secondButtons = await readAccessibilityButtons(page);
+          const secondLabel = secondButtons.find(b => b.pressed)?.label || '';
+          record('CYCLE: second rendered card has acquisition and product',
+            /acquired/.test(secondLabel) && secondLabel.includes(card2.product), secondLabel);
           if (card2.id === card1Id) exitCode = 1;
         } else {
           record('CYCLE: reclick cycled to different detection', false, 'no selected fire after reclick');

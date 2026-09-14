@@ -207,8 +207,19 @@ export function renderRegionalBrief(payload, info) {
         const title = document.createElement('strong');
         title.textContent = article.title;
         const metadata = document.createElement('span');
-        metadata.textContent = `${article.domain || 'SOURCE'} · ${formatCockpitBriefAge(article.publishedAt)}`;
-        link.append(title, metadata);
+        const publication = article.publicationTimeBasis && article.publishedAt
+          ? `REPORTED PUBLICATION ${formatCockpitBriefAge(article.publishedAt)}`
+          : 'PUBLICATION UNKNOWN';
+        const discovery = article.discoveredAt
+          ? ` · INDEXED ${formatCockpitBriefAge(article.discoveredAt)}` : '';
+        metadata.textContent = `${article.domain || 'SOURCE'} · ${publication}${discovery}`;
+        const uncertainty = document.createElement('span');
+        const repeatedHeadline = articles.some((other) => other !== article
+          && other.title?.toLowerCase() === article.title?.toLowerCase());
+        uncertainty.textContent = `EVENT TIME UNKNOWN · UNVERIFIED · CORRECTIONS UNKNOWN${repeatedHeadline ? ' · POSSIBLE SYNDICATION' : ''}`;
+        // Separate outlet links do not establish independent confirmation.
+        link.append(uncertainty);
+        link.prepend(title, metadata);
         entry.append(link);
         return entry;
       }),

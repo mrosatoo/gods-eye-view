@@ -166,6 +166,9 @@ async function main() {
         { timeout: 60000 },
       );
       await sleep(1500);
+      await page.waitForSelector('#first-run-launcher:not([hidden])', { timeout: 30000 });
+      await page.click('[data-first-run-choice="explore"]');
+      await page.waitForSelector('#first-run-launcher', { hidden: true, timeout: 10000 });
 
       const stats = await enableSatellitesAndWait(page);
 
@@ -279,6 +282,9 @@ async function main() {
         { timeout: 60000 },
       );
       await sleep(1500);
+      await page.waitForSelector('#first-run-launcher:not([hidden])', { timeout: 30000 });
+      await page.click('[data-first-run-choice="explore"]');
+      await page.waitForSelector('#first-run-launcher', { hidden: true, timeout: 10000 });
 
       const stats = await enableSatellitesAndWait(page);
 
@@ -336,6 +342,9 @@ async function main() {
         { timeout: 60000 },
       );
       await sleep(1500);
+      await page.waitForSelector('#first-run-launcher:not([hidden])', { timeout: 30000 });
+      await page.click('[data-first-run-choice="explore"]');
+      await page.waitForSelector('#first-run-launcher', { hidden: true, timeout: 10000 });
 
       // Seed the catalog with nominal data first
       const seedStats = await enableSatellitesAndWait(page);
@@ -350,6 +359,8 @@ async function main() {
         nominalChip?.feedState === 'nominal',
         `feedState=${nominalChip?.feedState}`);
 
+      await page.evaluate(() => window.__godsEyeView.dataManager.layers.get('satellites').module.trackById(25544, { origin: 'user' }));
+      await sleep(2500);
       // Switch to total failure mode and trigger a refresh
       interceptMode = 'failure';
       const afterOutage = await page.evaluate(async (seeded) => {
@@ -382,6 +393,10 @@ async function main() {
         lossChip?.feedState === 'unavailable' || lossChip?.feedState === 'stale',
         `feedState=${lossChip?.feedState} text=${lossChip?.text}`);
 
+      const retainedReadout = await page.evaluate(() => window.__godsEyeView.viewer.trackedEntity?.gevLabelModel);
+      record('TOTAL LOSS: tracked ISS readout retains original TLE epoch',
+        retainedReadout?.title === 'ISS (ZARYA)' && retainedReadout.details.some(d => /TLE 2026-09-13T12:00Z/.test(d)),
+        JSON.stringify(retainedReadout));
       await page.screenshot({ path: path.join(SHOTS_DIR, 'mf14-total-loss.png') });
       await page.close();
     }
