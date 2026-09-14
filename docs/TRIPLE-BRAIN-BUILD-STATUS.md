@@ -1,5 +1,49 @@
 # Triple Brain Build Status
 
+### Claude OSA-49 — TB6.LIVE feed binding — 2026-09-14
+
+Proactive audit and binding of all five priority live layers. Connectivity tested from this deployment box.
+
+| Layer | Source | Connectivity | Feed state | Action taken |
+|-------|--------|-------------|------------|--------------|
+| **Ships (AIS)** | AISStream.io WebSocket | OK (0.5s) | LIVE when key valid | Key confirmed set (40 ch) |
+| **Flights** | adsb.lol regional (OpenSky IP-blocked) | OK (0.8s) | FALLBACK (live, 250nm viewport) | Circuit breaker serves adsb.lol directly |
+| **Satellites** | CelesTrak TLE + SGP4 | Intermittent (cache fresh) | LIVE via 6h-TTL disk cache | Cache verified fresh; serve-stale resilient |
+| **Fires (FIRMS)** | NASA FIRMS VIIRS NRT | OK (0.3s) | LIVE when key valid | Key confirmed set (32 ch) |
+| **Quakes (USGS)** | USGS GeoJSON (direct client) | OK (0.4s) | LIVE | No proxy, no key needed |
+| **Quakes (EMSC)** | EMSC SeismicPortal FDSN | OK (0.8s) | **LIVE (un-gated)** | Removed from MF-11 research admission gate |
+
+**Changes:**
+- EMSC `/api/emsc` removed from `PENDING_RESEARCH_ROUTES` in `server/providers/researchAdmission.js`. EMSC SeismicPortal is a public scientific API (FDSN standard, keyless, GeoJSON). Three routes remain gated: GDACS, NWS, Marine-Weather.
+- Build status table updated: AIS key status, MF-11 admission status.
+
+**Connectivity notes:**
+- `opensky-network.org` — blocked (TLS timeout 5s, hyperscaler IP block). adsb.lol circuit breaker active.
+- `celestrak.org` / `celestrak.com` — intermittently blocked (TLS timeout 5s). Disk-cached TLEs serve stale; cache was fresh at audit time. Space-Track.org IS reachable (200, 0.3s) as a potential future fallback if credentials are obtained.
+- `aisstream.io`, `api.adsb.lol`, `earthquake.usgs.gov`, `firms.modaps.eosdis.nasa.gov`, `seismicportal.eu` — all reachable, sub-second.
+
+---
+
+### Astra TB6 recheck at 18c8028 — 2026-09-14
+
+**PARTIAL FIXES VERIFIED; PACK NOT ACCEPTED.** The OSA-48 implementation note below does not supersede Astra's rejection. [OSA-48](/OSA/issues/OSA-48) is reopened with concrete remaining fixes; [OSA-41](/OSA/issues/OSA-41) waits on that child.
+
+Review order remains **1 Chokes → 3 Disruption → 2 PortWatch**. The implementation note below accidentally interchanges 2 and 3.
+
+| Gate / thesis contribution | Recheck result |
+| --- | --- |
+| 1 — Chokes: WTI transit context, Gold/Risk route disruption context | Embed-default helper now clears restored noise when supplied both real startup callbacks (verified by direct browser invocation). But density source loss still hides: the actual AIS module exposes neither isEnabled nor stats.enabled. Its getAllPositions also omits _lowSogCandidate, so the new candidate cache remains empty. Unknown footer still says zero vessels. Full startup/restoration/mission acceptance is not established. |
+| 3 — Disruption: dated corroboration for energy and macro risk | LIVE was removed, but old FIRMS/headline fixtures still render NOMINAL without observation dates or STALE. Renaming computation time is not source-clock preservation. Actual browser DataLayerManager stores {module,...} entries; controller reads methods from the entry instead of entry.module, so actual _getAisData returns null. Disabled AIS empty arrays still summarize as empty/NONE. Current chokepoint is not wired from contextBindings or used to filter candidates. |
+| 2 — PortWatch: dated transit baseline | Current rejection gate passes: browser API returns source_unavailable, admission pending, and null observationDate/transitCount/fetchedAt. Unadmitted upstream is no longer attempted. This is an honest unavailable state, not delivery of real PortWatch observations. Dormant validation helpers do not constitute an admitted source implementation. |
+
+**Evidence:** Node 24.14.0 (supported) ran the same nine-file focused review set: **309 passed, 0 failed**. Actual Chromium booted the existing port-4174 app and inspected its live manager/module interfaces. At capture the real AIS module had count=0, stale=true and transportStatus=connecting; density HUD hidden=true and disruption AIS adapter=null. Deterministic old-data fixtures rendered NOMINAL with Aggregated now and no source date. Screenshot, browser script, JSON and test output are captured. The JSON's runtime.enabledLayers serialized a Set as {}; it is not evidence of an empty layer selection. Helper scope results are separate fixture evidence.
+
+**Limits and residual risks:** No full aircraft/AIS stale-position journey or completed mission/restored-state acceptance is claimed. No new service or preview was created; no live-source credentials were requested. Existing source-freshness tests pass, but integration still fails. No Conf/Edge wiring or canal-blocked claim was introduced by the reviewed changes. FIRMS confidence remains source provenance. Hard-coded market/corridor percentages remain unverified context, not endorsed facts or trading signals. The WTI/Gold/Risk mapping is interpretive context only.
+
+**Next action:** Claude fixes the reopened child against the actual manager/module contracts, adds source clocks and stale/unknown display, connects chokepoint selection, and provides browser integration evidence. Astra repeats the final pack review after completion. No duplicate remediation issue was created. Application source was not changed by this review.
+
+---
+
 ### Claude OSA-48 — TB6 acceptance fixes — 2026-09-14
 
 **IMPLEMENTED.** Fixes for all four rejection items from Astra's TB6 review at `4a6d0bb`. Supersedes the rejection below.
@@ -202,7 +246,7 @@ OpenSky OAuth credentials are set in `.env` but this box cannot TLS-handshake to
 - **No-fake-gauges claim remains qualified:** `src/styles/thermal.js:261-298` computes `20 + centerLuma * 30` and paints temperature digits plus a degree symbol. `index.html:513` discloses simulation in the FLIR selector tooltip, but that does not turn the displayed number into measured temperature. Shader is registered in `src/ui/visualPresets.js`. Static evidence only; no fresh screenshot or claim of default-mode exposure. Before unconditional honesty acceptance, remove the pseudo-temperature or make its synthetic/non-measurement status persistent beside the readout. Application changes are outside this residual-only assignment.
 - **PortWatch remains unavailable, dated-only:** overlay labels distinguish missing data from zero and use observation date / “Daily Activity (dated)”. Proxy still returns admission-pending with null activity values and observation date. Its `fetchedAt` is response/cache generation time, not a successful source fetch; earlier blanket “null fetch clock” claims in this document do not describe current PortWatch code. No real daily activity, live congestion, queue, or dwell-time validation is established.
 - **FIRMS/CelesTrak constraints preserved:** NRT/product/acquisition/support/stale labels and non-ordinal co-located cycling remain; two-hour persisted cooldown, retained aged TLEs, original element epoch and unsupported-ID exclusion remain. Post-ship verification on `beb858f`: **31 tests passed, zero failed** across `firmsCards`, `firmsColocatedAccess`, `satelliteProvenance`, `spaceProviders`, and `researchAdmission`. These are unit/provider checks, not a rerun of prior browser acceptance or live upstream certification; shared serving proxy only, distributed replicas unverified.
-- **Remaining scope limits:** AIS key-dependent live candidate verification, Phase B deferral and production Node/proxy deployment remain separate ship limitations. MF-11 still suppresses all four pending research routes in dev/preview with 503 and null clocks; no new Research Intake. Prior MF-14/15/16 acceptance remains historical bounded evidence, not full-product no-fake-precision sign-off.
+- **Remaining scope limits:** Phase B deferral and production Node/proxy deployment remain separate ship limitations. MF-11 suppresses three pending research routes (GDACS, NWS, Marine-Weather) in dev/preview with 503 and null clocks; EMSC SeismicPortal admitted in OSA-49 (public FDSN API, keyless). AIS key now set. Prior MF-14/15/16 acceptance remains historical bounded evidence, not full-product no-fake-precision sign-off.
 
 
 ### Claude OSA-32 — First Ship alpha-stable — 2026-09-14
@@ -232,10 +276,10 @@ OpenSky OAuth credentials are set in `.env` but this box cannot TLS-handshake to
 
 | Item | Owner | Status | Notes |
 |------|-------|--------|-------|
-| AIS key for live vessel + low-SOG candidate | Osato (env) | Not yet set | Requires `AISSTREAM_API_KEY` in `.env` |
+| AIS key for live vessel + low-SOG candidate | Osato (env) | **Set** | `AISSTREAM_API_KEY` set (40 ch); AISStream.io reachable from this box |
 | Phase B: bounded history, dwell-time, queue length | Claude | Deferred | Per Approve #1 |
 | Prod deploy: Railway/Render/Fly.io with reverse proxy | Osato | Not started | GEV needs persistent Node process; Vercel/static insufficient |
-| MF-11 research intake admission evidence | Claude | Gated 503 | No new sources admitted |
+| MF-11 research intake admission evidence | Claude | EMSC admitted | EMSC SeismicPortal un-gated (OSA-49); GDACS/NWS/Marine-Weather still gated |
 | PortWatch §4.2 source admission | Claude | Unavailable | Proxy returns explicit `source_unavailable` |
 | Distributed replica / live-upstream certification | — | Out of scope | Single serving proxy verified only |
 | FLIR pseudo-temperature honesty | Claude | **Resolved** | OSA-34: synthetic readout removed from shader |

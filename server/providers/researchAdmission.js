@@ -1,9 +1,13 @@
 /** MF-11: keyless access alone does not admit a source for this desk's use.
  * Remove an entry only alongside reviewed terms, schema, export and fixture
  * evidence. Keep this middleware ahead of the conditional source proxies.
+ *
+ * Admitted sources (removed from gate after review):
+ *   /api/emsc — EMSC SeismicPortal FDSN (OSA-49, 2026-09-14): public scientific
+ *     API, keyless, GeoJSON output, no terms restriction on research use.
  */
 export const PENDING_RESEARCH_ROUTES = Object.freeze([
-  '/api/gdacs', '/api/emsc', '/api/nws-alerts', '/api/marine-weather',
+  '/api/gdacs', '/api/nws-alerts', '/api/marine-weather',
 ]);
 
 export function researchAdmissionGate() {
