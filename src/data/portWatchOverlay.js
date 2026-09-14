@@ -1,9 +1,12 @@
 /**
- * PortWatch daily activity overlay (Phase A — P0).
+ * PortWatch daily activity overlay — honest dated transit data.
  *
  * Fetches /api/portwatch?chokepoint=<name> and renders dated activity
- * data per chokepoint. Labels per Lenkung: "daily activity / PortWatch dated",
+ * per chokepoint. Labels per Lenkung: "daily activity / PortWatch dated",
  * never "live congestion" or "queue time".
+ *
+ * Four thesis chokepoints get context cards (Hormuz, Suez, Bab, Malacca).
+ * Secondary chokepoints (Singapore, Cape) render standard rectangle overlays.
  *
  * Registry entry: { id: 'portwatch', enabled: false }
  */
@@ -14,11 +17,30 @@ import { CHOKEPOINT_BOUNDING_BOXES } from '../thesisDefaults.js';
 const REFRESH_MS = 60 * 60 * 1000;
 const CHOKEPOINTS = Object.keys(CHOKEPOINT_BOUNDING_BOXES);
 
+const THESIS_CHOKEPOINTS = ['hormuz', 'suez', 'bab', 'malacca'];
+
+const CHOKEPOINT_DISPLAY_NAMES = Object.freeze({
+  hormuz: 'Strait of Hormuz',
+  suez: 'Suez Canal',
+  bab: 'Bab el-Mandeb',
+  malacca: 'Strait of Malacca',
+  singapore: 'Singapore Strait',
+  cape: 'Cape of Good Hope',
+});
+
+const CHOKEPOINT_CONTEXT = Object.freeze({
+  hormuz: 'Oil transit corridor — ~20% global seaborne oil',
+  suez: 'Trade corridor — ~12% global trade volume',
+  bab: 'Red Sea access gate — links Suez to Indian Ocean',
+  malacca: 'Asia trade corridor — ~25% global seaborne trade',
+});
+
 let _viewer = null;
 let _enabled = false;
 let _entities = [];
 let _refreshTimer = null;
 let _dataCache = new Map();
+let _fetchImpl = typeof fetch !== 'undefined' ? fetch : null;
 
 function boxCenter(box) {
   return {
@@ -33,14 +55,37 @@ function boxToRectangle(box) {
 
 async function fetchPortWatch(chokepoint) {
   try {
-    const res = await fetch(`/api/portwatch?chokepoint=${encodeURIComponent(chokepoint)}`, {
+    const res = await _fetchImpl(`/api/portwatch?chokepoint=${encodeURIComponent(chokepoint)}`, {
       signal: AbortSignal.timeout(15000),
     });
-    if (!res.ok) return { error: 'upstream_error', fetchedAt: new Date().toISOString() };
+    if (!res.ok) return { chokepoint, error: 'upstream_error', fetchedAt: new Date().toISOString() };
     return await res.json();
   } catch {
-    return { error: 'fetch_failed', fetchedAt: new Date().toISOString() };
+    return { chokepoint, error: 'fetch_failed', fetchedAt: new Date().toISOString() };
   }
+}
+
+function dataAge(data) {
+  if (!data.observationDate) return null;
+  const obs = new Date(data.observationDate);
+  if (isNaN(obs.getTime())) return null;
+  const diffMs = Date.now() - obs.getTime();
+  const days = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+  if (days <= 0) return 'today';
+  if (days === 1) return '1 day ago';
+  return `${days} days ago`;
+}
+
+function classifyFreshness(data) {
+  if (data.error) return 'unavailable';
+  if (!data.observationDate) return 'undated';
+  const obs = new Date(data.observationDate);
+  if (isNaN(obs.getTime())) return 'undated';
+  const diffMs = Date.now() - obs.getTime();
+  const days = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+  if (days <= 2) return 'recent';
+  if (days <= 7) return 'dated';
+  return 'stale';
 }
 
 function formatLabel(data) {
@@ -50,20 +95,49 @@ function formatLabel(data) {
     }
     return 'PortWatch — Activity data unavailable';
   }
-  const name = data.chokepoint
-    ? data.chokepoint.charAt(0).toUpperCase() + data.chokepoint.slice(1)
-    : 'Unknown';
+  const name = CHOKEPOINT_DISPLAY_NAMES[data.chokepoint] || data.chokepoint || 'Unknown';
   const date = data.observationDate || 'date unknown';
   if (data.transitCount == null) {
     return `${name}: Activity data unavailable for this period\nPortWatch dated · ${date}`;
   }
-  let line = `${name}: ${data.transitCount} transits/day (${date})`;
+  let line = `${name}: ${data.transitCount} transits/day`;
   if (data.avgTransitCount != null && data.pctChange != null && data.avgTransitCount > 0) {
     const arrow = data.pctChange < 0 ? '▼' : data.pctChange > 0 ? '▲' : '—';
     line += ` — avg ${data.avgTransitCount} ${arrow} ${Math.abs(data.pctChange).toFixed(0)}%`;
   }
-  line += '\nPortWatch — Daily Activity (dated)';
+  const age = dataAge(data);
+  const ageSuffix = age ? ` (${age})` : '';
+  line += `\nPortWatch — dated ${date}${ageSuffix}`;
   return line;
+}
+
+function formatContextCard(data) {
+  const name = CHOKEPOINT_DISPLAY_NAMES[data.chokepoint] || data.chokepoint;
+  const context = CHOKEPOINT_CONTEXT[data.chokepoint] || '';
+  const freshness = classifyFreshness(data);
+
+  if (data.error) {
+    let status = 'Source admission pending';
+    if (data.error === 'fetch_failed') status = 'Data temporarily unavailable';
+    if (data.error === 'upstream_error') status = 'Upstream error';
+    return `⚓ ${name}\n${context}\n─────\n${status}\nIMF PortWatch · source_unavailable`;
+  }
+
+  if (data.transitCount == null) {
+    return `⚓ ${name}\n${context}\n─────\nNo transit data for this period\nIMF PortWatch · dated ${data.observationDate || '?'}`;
+  }
+
+  let card = `⚓ ${name}\n${context}\n─────\n${data.transitCount} transits/day`;
+  if (data.avgTransitCount != null && data.pctChange != null) {
+    const arrow = data.pctChange < 0 ? '▼' : data.pctChange > 0 ? '▲' : '—';
+    const pctLabel = `${arrow} ${Math.abs(data.pctChange).toFixed(0)}% vs avg (${data.avgTransitCount})`;
+    card += `\n${pctLabel}`;
+  }
+  const age = dataAge(data);
+  const freshLabel = freshness === 'recent' ? 'recent' : freshness === 'stale' ? 'STALE' : 'dated';
+  card += `\nIMF PortWatch · ${freshLabel} ${data.observationDate || '?'}`;
+  if (age && freshness !== 'recent') card += ` (${age})`;
+  return card;
 }
 
 function fillColor(data) {
@@ -86,6 +160,16 @@ function borderColor(data) {
   return Cesium.Color.fromCssColorString('rgba(100, 140, 180, 0.35)');
 }
 
+function contextCardBgColor(data) {
+  if (data.error || data.transitCount == null) {
+    return Cesium.Color.fromCssColorString('rgba(6, 14, 22, 0.88)');
+  }
+  if (data.pctChange != null && data.pctChange < -10) {
+    return Cesium.Color.fromCssColorString('rgba(30, 20, 6, 0.88)');
+  }
+  return Cesium.Color.fromCssColorString('rgba(6, 14, 22, 0.88)');
+}
+
 function renderOverlays() {
   clearEntities();
   if (!_viewer || !_enabled) return;
@@ -94,6 +178,7 @@ function renderOverlays() {
     const box = CHOKEPOINT_BOUNDING_BOXES[chokepoint];
     if (!box) continue;
     const center = boxCenter(box);
+    const isThesis = THESIS_CHOKEPOINTS.includes(chokepoint);
 
     const entity = _viewer.entities.add({
       name: `portwatch-${chokepoint}`,
@@ -106,8 +191,8 @@ function renderOverlays() {
         height: 0,
       },
       label: {
-        text: formatLabel(data),
-        font: '11px JetBrains Mono, monospace',
+        text: isThesis ? formatContextCard(data) : formatLabel(data),
+        font: isThesis ? '11px JetBrains Mono, monospace' : '10px JetBrains Mono, monospace',
         fillColor: Cesium.Color.fromCssColorString('#e8eaed'),
         outlineColor: Cesium.Color.BLACK,
         outlineWidth: 2,
@@ -116,15 +201,16 @@ function renderOverlays() {
         horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
         pixelOffset: new Cesium.Cartesian2(0, 0),
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 3000000),
+        distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, isThesis ? 4500000 : 3000000),
         showBackground: true,
-        backgroundColor: Cesium.Color.fromCssColorString('rgba(6, 14, 22, 0.82)'),
-        backgroundPadding: new Cesium.Cartesian2(8, 5),
+        backgroundColor: contextCardBgColor(data),
+        backgroundPadding: new Cesium.Cartesian2(isThesis ? 10 : 8, isThesis ? 7 : 5),
       },
       position: Cesium.Cartesian3.fromDegrees(center.lon, center.lat, 100),
       properties: {
         layerId: 'portwatch',
         chokepoint,
+        isThesisChokepoint: isThesis,
         data,
       },
     });
@@ -192,12 +278,43 @@ const portWatchOverlay = {
   },
 
   getStats() {
-    return {
-      enabled: _enabled,
-      chokepoints: CHOKEPOINTS.length,
-      cached: _dataCache.size,
-    };
+    const stats = { enabled: _enabled, chokepoints: CHOKEPOINTS.length, cached: _dataCache.size };
+    const freshnessCounts = { recent: 0, dated: 0, stale: 0, unavailable: 0, undated: 0 };
+    for (const data of _dataCache.values()) {
+      const f = classifyFreshness(data);
+      freshnessCounts[f] = (freshnessCounts[f] || 0) + 1;
+    }
+    stats.freshness = freshnessCounts;
+    return stats;
   },
 };
 
 export default portWatchOverlay;
+
+export {
+  THESIS_CHOKEPOINTS,
+  CHOKEPOINT_DISPLAY_NAMES,
+  CHOKEPOINT_CONTEXT,
+  formatLabel,
+  formatContextCard,
+  fillColor,
+  borderColor,
+  classifyFreshness,
+  dataAge,
+  boxCenter,
+};
+
+export function _setFetchImplForTest(fn) { _fetchImpl = fn; }
+export function _getDataCacheForTest() { return _dataCache; }
+export function _setDataCacheForTest(map) { _dataCache = map; }
+export function _getEnabledForTest() { return _enabled; }
+export function _setEnabledForTest(val) { _enabled = val; }
+export function _getEntitiesForTest() { return _entities; }
+export function _resetStateForTest() {
+  _viewer = null;
+  _enabled = false;
+  _entities = [];
+  _refreshTimer = null;
+  _dataCache = new Map();
+  _fetchImpl = typeof fetch !== 'undefined' ? fetch : null;
+}
