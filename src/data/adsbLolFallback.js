@@ -45,11 +45,8 @@ export function normalizeAdsbLolAircraftState(aircraft, nowSeconds) {
   const longitude = finiteNumber(aircraft?.lon);
   if (!hex || latitude === null || longitude === null) return null;
 
-  const seenPosition = Math.max(
-    0,
-    finiteNumber(aircraft?.seen_pos) ?? finiteNumber(aircraft?.seen) ?? 0,
-  );
-  const seen = Math.max(0, finiteNumber(aircraft?.seen) ?? seenPosition);
+  const seenPosition = finiteNumber(aircraft?.seen_pos);
+  const seen = finiteNumber(aircraft?.seen);
   const onGround = aircraft?.alt_baro === 'ground';
   const barometricFeet = onGround ? null : finiteNumber(aircraft?.alt_baro);
   const geometricFeet = finiteNumber(aircraft?.alt_geom);
@@ -62,8 +59,8 @@ export function normalizeAdsbLolAircraftState(aircraft, nowSeconds) {
     hex,
     String(aircraft?.flight || aircraft?.r || '').trim() || null,
     null,
-    Math.max(0, nowSeconds - seenPosition),
-    Math.max(0, nowSeconds - seen),
+    Number.isFinite(nowSeconds) && nowSeconds > 0 && seenPosition !== null && seenPosition >= 0 ? Math.max(0, nowSeconds - seenPosition) : null,
+    Number.isFinite(nowSeconds) && nowSeconds > 0 && seen !== null && seen >= 0 ? Math.max(0, nowSeconds - seen) : null,
     longitude,
     latitude,
     barometricFeet === null ? null : barometricFeet * FOOT_TO_M,
@@ -90,7 +87,7 @@ export function normalizeAdsbLolPointResponse(payload) {
   const responseNow = finiteNumber(payload?.now);
   const nowSeconds =
     responseNow === null
-      ? Math.floor(Date.now() / 1000)
+      ? null
       : Math.floor(
           responseNow > 10_000_000_000 ? responseNow / 1000 : responseNow,
         );

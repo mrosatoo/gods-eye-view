@@ -1,0 +1,93 @@
+/* Choke Density HUD — per-chokepoint vessel counts + low-SOG candidates */
+#choke-density-hud {
+  position: fixed;
+  bottom: 80px;
+  right: 16px;
+  z-index: 110;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--gev-osiris-cyan);
+  background: var(--gev-osiris-panel);
+  border: 1px solid var(--gev-osiris-border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  min-width: 170px;
+  pointer-events: none;
+  user-select: none;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+#choke-density-hud[hidden] { display: none; }
+
+.choke-hud-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--gev-osiris-border);
+}
+.choke-hud-title {
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gev-osiris-cyan);
+}
+.choke-hud-degraded {
+  font-size: 9px;
+  color: var(--gev-status-stale, #ffab00);
+  letter-spacing: 0.04em;
+}
+
+.choke-hud-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.choke-hud-row {
+  display: grid;
+  grid-template-columns: 70px 32px 1fr;
+  gap: 4px;
+  align-items: baseline;
+  padding: 1px 0;
+}
+.choke-hud-region {
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  color: var(--gev-osiris-cyan);
+}
+.choke-hud-count {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.85);
+}
+.choke-hud-candidates {
+  font-size: 10px;
+  color: var(--gev-osiris-gold);
+  font-variant-numeric: tabular-nums;
+}
+.choke-hud-candidates--none {
+  color: rgba(255, 255, 255, 0.25);
+}
+.choke-hud-row--alert .choke-hud-region {
+  color: var(--gev-osiris-gold);
+}
+
+.choke-hud-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-top: 6px;
+  padding-top: 4px;
+  border-top: 1px solid var(--gev-osiris-border);
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.45);
+}
+.choke-hud-footer-alert {
+  color: var(--gev-osiris-gold);
+}
+
+/* Hide in cockpit mode and clean view */
+.cockpit-mode #choke-density-hud,
+.ui-clean-view #choke-density-hud { display: none; }

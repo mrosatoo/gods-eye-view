@@ -371,12 +371,18 @@ export class LayerPanel {
         typeof stats.retryInSec === 'number' && stats.retryInSec > 0
           ? ` · retrying in ${stats.retryInSec}s`
           : '';
-      return `${stateLabel} · ${source} · ${ago}${retry}`;
+      const staleDataAge = typeof stats.sourceAgeLabel === 'string' && stats.sourceAgeLabel
+        ? ` · ${stats.sourceAgeLabel}`
+        : '';
+      return `${stateLabel} · ${source} · ${ago}${staleDataAge}${retry}`;
     }
     if (typeof stats.loadingLabel === 'string' && stats.loadingLabel.trim()) {
       return `${source} · ${stats.loadingLabel.trim()}`;
     }
-    return `${source} · ${ago}`;
+    const dataAge = typeof stats.sourceAgeLabel === 'string' && stats.sourceAgeLabel
+      ? ` · ${stats.sourceAgeLabel}`
+      : '';
+    return `${source} · ${ago}${dataAge}`;
   }
 
   _syncToggleButton(button, layer) {

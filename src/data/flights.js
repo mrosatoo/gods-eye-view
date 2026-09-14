@@ -1,3 +1,4 @@
+import { sourceFreshness, AIR_POSITION_SLA_MS } from './sourceFreshness.js';
 /**
  * @module flights
  * @description Real-time flight tracking layer powered by the OpenSky Network API
@@ -303,6 +304,7 @@ const _geoidNCache = new Map();
 let _count = 0;
 /** @type {number|null} Epoch ms of last successful API update */
 let _lastUpdate = null;
+let _lastFreshnessLabelSecond = null;
 /** @type {boolean} True while in a backoff/cooldown window */
 let _backoff = false;
 /** @type {number} Epoch ms — earliest time the next fetch is allowed */
@@ -441,7 +443,8 @@ function _contextSubjectMetadata(icao24) {
       icao24,
       // Honesty cue: the contact is coasting on dead reckoning, so the
       // narrated position/velocity are last-known rather than live.
-      status: described.stale ? 'stale (missed polls)' : 'live',
+      status: described.stale ? 'STALE' : 'live',
+      observationAge: sourceFreshness(described.positionEpochMs, AIR_POSITION_SLA_MS).label,
     },
   };
 }
@@ -2616,6 +2619,11 @@ function _fleetTick() {
   const scene = _viewer.scene;
   const camera = _viewer.camera;
   const nowMs = focusNowMs(Date.now());
+  const freshnessSecond = Math.floor(Date.now() / 1000);
+  if (_trackedIcao && freshnessSecond !== _lastFreshnessLabelSecond) {
+    _lastFreshnessLabelSecond = freshnessSecond;
+    _updateTrackedLabelModel(_trackedIcao);
+  }
 
   // (The tracked trail head is now the per-frame _trailHeadEntity segment — no 1 Hz
   // primitive rebuild needed here anymore.)
@@ -2898,7 +2906,9 @@ function _describeFlight(icao24) {
     onGround: info?.onGround === true,
     velocityMps: displayed.speedMps,
     track: displayed.trackDeg,
-    stale: Boolean(_missingPolls.get(icao24) || _backoff),
+    stale: Boolean(_missingPolls.get(icao24) || _backoff || sourceFreshness(info?.positionEpochMs, AIR_POSITION_SLA_MS).stale),
+    positionEpochMs: info?.positionEpochMs ?? null,
+    sourceAgeMs: sourceFreshness(info?.positionEpochMs, AIR_POSITION_SLA_MS).ageMs,
     airline: info?.airline ?? null,
     // CLASS label follows the TR-3B conversion so every downstream card
     // (cockpit, Contacts, analyst) agrees with the triangle on screen.
@@ -3280,7 +3290,8 @@ function _trackedLabelText(icao24) {
   const altFt = Math.round((info.altitude || 0) * 3.28084);
   const fl = altFt >= 18000 ? `FL${Math.round(altFt / 100)}` : `${altFt} ft`;
   const spd = info.velocity ? `${Math.round(info.velocity * 1.944)} kts` : '';
-  const stale = (_missingPolls.get(icao24) || _backoff) ? 'STALE' : '';
+  const freshness = sourceFreshness(info.positionEpochMs, AIR_POSITION_SLA_MS);
+  const stale = `${freshness.label}${!freshness.stale && (_missingPolls.get(icao24) || _backoff) ? ' · STALE' : ''}`;
   const lines = [[cs, fl, spd, stale].filter(Boolean).join(' · ')];
   // Converted contacts report their class as TR-3B and nothing else — the
   // operator/type identity is exactly what the Easter egg is replacing.
@@ -4151,12 +4162,12 @@ const flightsLayer = {
       const sourceEpochMs = Number.isFinite(Number(data.time)) && Number(data.time) > 0
         ? Number(data.time) * 1000
         : null;
-      const sourceAgeMs = sourceEpochMs == null ? 0 : Math.max(0, Date.now() - sourceEpochMs);
-      const sourceStale = sourceAgeMs > SOURCE_STALE_MS;
+      const sourceHealth = sourceFreshness(sourceEpochMs, SOURCE_STALE_MS);
+      const sourceStale = sourceHealth.stale;
       _backoff = sourceStale;
       _retryAt = 0;
       _lastError = sourceStale
-        ? `Source snapshot ${Math.max(2, Math.round(sourceAgeMs / 60_000))} min old`
+        ? `Source snapshot ${sourceHealth.label}`
         : null;
       _lastSource = responseSource || 'OpenSky Network';
       _lastCoverage = responseCoverage || 'worldwide upstream snapshot';
@@ -4377,6 +4388,7 @@ const flightsLayer = {
           // transponder message. The fleet coast horizon uses this actual
           // contact time so a temporarily old position does not hard-freeze
           // while fresh velocity/track messages are still arriving.
+          positionEpochMs: Number.isFinite(time_position) && time_position > 0 ? time_position * 1000 : null,
           lastContactEpochMs: stickyNumber(
             Number.isFinite(last_contact) ? last_contact * 1000 : null,
             prevMeta?.lastContactEpochMs,
@@ -4605,7 +4617,7 @@ const flightsLayer = {
       _count = _billboards.size;
       // Freshness belongs to the source snapshot, not the moment this browser
       // received a cached 200 response.
-      _lastUpdate = sourceEpochMs ?? Date.now();
+      _lastUpdate = sourceEpochMs;
       _lastTrackingRefreshOutcome = {
         epoch: trackingRefreshEpoch,
         status: 'accepted',
@@ -5220,10 +5232,13 @@ const flightsLayer = {
    */
   getStats() {
     const retryInSec = _retryAt ? Math.max(0, Math.ceil((_retryAt - Date.now()) / 1000)) : 0;
+    const freshness = sourceFreshness(_lastUpdate, SOURCE_STALE_MS);
     return {
       count: _count,
       lastUpdate: _lastUpdate,
-      stale: _backoff,
+      stale: _backoff || (_count > 0 && freshness.stale),
+      sourceAgeLabel: freshness.label,
+      sourceAgeMs: freshness.ageMs,
       error: _lastError,
       status: _lastStatus,
       retryInSec,

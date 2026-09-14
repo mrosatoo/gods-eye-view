@@ -651,3 +651,35 @@ export function initFirstRunExperience({
 
   return { dismiss, isTopmost };
 }
+
+/**
+ * Detect the `welcome=0` embed path and return true when the app should
+ * auto-enable AIS and land on chokepoints instead of the default view.
+ * @param {{search?: string}|null} [location]
+ * @returns {boolean}
+ */
+export function isEmbedBootPath(location = globalThis.location) {
+  const params = new URLSearchParams(location?.search || '');
+  return params.get('welcome') === '0';
+}
+
+/**
+ * Auto-run the shipping mission for embed deployments (`?welcome=0`).
+ * Silently enables AIS and flies to the globe's chokepoint overview so
+ * the operator reads Hormuz/Suez/Bab/Malacca without hunting.
+ *
+ * @param {object} deps
+ * @param {(layerId: string) => Promise<boolean>} deps.setLayerEnabled
+ * @param {() => Promise<any>} deps.flyToGlobe
+ * @returns {Promise<{ok: boolean}>}
+ */
+export async function runEmbedBoot({ setLayerEnabled, flyToGlobe }) {
+  const flight = Promise.resolve()
+    .then(() => flyToGlobe())
+    .catch(() => null);
+  try {
+    await setLayerEnabled('ais-live-vessels');
+  } catch { /* AIS enable is best-effort */ }
+  await flight;
+  return { ok: true };
+}

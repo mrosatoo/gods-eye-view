@@ -1,3 +1,4 @@
+import { sourceFreshness, AIS_POSITION_SLA_MS, AIS_POSITION_EVICT_MS } from './sourceFreshness.js';
 import * as Cesium from 'cesium';
 import {
   registerEntityContext,
@@ -646,6 +647,7 @@ const aisLiveVesselsLayer = {
 
   getStats() {
     const waitingForFirstPosition = state.firstConnectPhase === 'loading';
+    const newest = newestVesselFreshness();
     return {
       count: state.count,
       lastUpdate: state.lastUpdate,
@@ -654,15 +656,14 @@ const aisLiveVesselsLayer = {
         ? AIS_FIRST_CONNECT_LABEL
         : state.loadingLabel,
       error: state.error,
-      stale: state.stale,
+      stale: state.stale || newest.stale,
       status: state.firstConnectPhase === 'unavailable' ? 'unavailable' : undefined,
       transportStatus: state.transportStatus,
       lastMessageAt: state.lastMessageAt,
       rawRowCount: state.rawRowCount,
       acceptedRowCount: state.acceptedRowCount,
-      // Same chip affordance the flights layer uses: when the server is
-      // backing off, say how long until the next attempt instead of leaving
-      // the user to guess whether anything is still happening.
+      sourceAgeLabel: newest.label,
+      sourceAgeMs: newest.ageMs,
       retryInSec: aisRetryInSec(),
     };
   },
@@ -998,9 +999,11 @@ function reconcileVessels(viewer, rows) {
 
   const occluder = makeOccluder();
   const seen = new Set();
+  const nowMs = _aisRuntime.now();
   for (let index = 0; index < rows.length; index += 1) {
     const next = normalizeVessel(rows[index]);
     if (!next) continue;
+    if (isPositionEvicted(next, nowMs)) continue;
 
     if (!next.mmsi) {
       addRecordPrimitives(next, occluder);
@@ -1249,6 +1252,7 @@ function updateVisibility(force = false) {
   if (regularPass) {
     state.lastVisibilityUpdate = now;
     applyLowSogCandidates();
+    if (state.selectedRecord) updateSelectedVesselHud(state.selectedRecord);
   }
   if (focusPass) state.lastFocusUpdate = now;
   if (!state.vesselRecords.length) {
@@ -1807,7 +1811,7 @@ function updateSelectedVesselHud(record) {
   const el = document.getElementById('hud-ais-vessel');
   if (!el) return;
 
-  const stale = (record.missedRefreshes || 0) > 0;
+  const stale = (record.missedRefreshes || 0) > 0 && !vesselFreshness(record).stale;
   const candidateText = candidateLabel(record._lowSogCandidate);
   el.classList.add('active');
   const lines = [
@@ -1848,6 +1852,7 @@ export function buildVesselCard(record) {
   if (Number.isFinite(direction)) parts.push(`${Math.round(direction)}°`);
   const candidateText = candidateLabel(record._lowSogCandidate);
   if (candidateText) parts.push(`⚓ ${candidateText}`);
+  parts.push(vesselFreshness(record).label);
   return {
     id: vesselOverlayEntryId(record),
     actionable: Boolean(record?.mmsi),
@@ -1880,7 +1885,7 @@ export function buildSelectedVesselCard(record) {
   if (candidateText) details.push(`⚓ ${candidateText}`);
   const destination = String(record.destination || '').trim();
   if (destination) details.push(`→ ${trimHudValue(destination, 24)}`);
-  const stale = (record.missedRefreshes || 0) > 0;
+  const stale = (record.missedRefreshes || 0) > 0 && !vesselFreshness(record).stale;
   details.push(`MMSI ${record.mmsi || '--'} · ${formatPositionTime(record)}${stale ? ' · STALE' : ''}`);
   return {
     id: vesselOverlayEntryId(record),
@@ -1943,11 +1948,33 @@ function formatHeading(heading) {
   return Number.isFinite(heading) ? `${Math.round(heading)}DEG` : '--DEG';
 }
 
+function vesselFreshness(record) {
+  return sourceFreshness(Date.parse(record.lastPositionUtc), AIS_POSITION_SLA_MS);
+}
+
+export function isPositionEvicted(record, nowMs = Date.now()) {
+  const epoch = record.lastPositionEpoch ?? Date.parse(record.lastPositionUtc);
+  if (!Number.isFinite(epoch) || epoch <= 0) return false;
+  return (nowMs - epoch) > AIS_POSITION_EVICT_MS;
+}
+
+function newestVesselFreshness() {
+  const records = state.vesselRecords;
+  if (!records || !records.length) return { ageMs: null, stale: false, label: '' };
+  let newestMs = -Infinity;
+  for (const r of records) {
+    const ms = Date.parse(r.lastPositionUtc);
+    if (Number.isFinite(ms) && ms > newestMs) newestMs = ms;
+  }
+  if (newestMs === -Infinity) return { ageMs: null, stale: true, label: 'AGE UNKNOWN' };
+  return sourceFreshness(newestMs, AIS_POSITION_SLA_MS);
+}
+
 function formatPositionTime(record) {
-  if (!record.lastPositionUtc) return 'POS: TIME UNKNOWN';
+  if (!record.lastPositionUtc) return 'POS: TIME UNKNOWN · AGE UNKNOWN · STALE';
   const date = new Date(record.lastPositionUtc);
-  if (Number.isNaN(date.getTime())) return 'POS: TIME UNKNOWN';
-  return `POS: ${date.toISOString().slice(11, 19)}Z`;
+  if (Number.isNaN(date.getTime())) return 'POS: TIME UNKNOWN · AGE UNKNOWN · STALE';
+  return `POS: ${date.toISOString()} · ${vesselFreshness(record).label}`;
 }
 
 function setVisible(show) {
@@ -2105,7 +2132,7 @@ export function _getVesselFeedStateForTest() {
     loaded: state.loaded,
     loading: stats.loading,
     loadingLabel: stats.loadingLabel,
-    stale: state.stale,
+    stale: stats.stale,
     error: state.error,
     status: stats.status,
     lastUpdate: state.lastUpdate,

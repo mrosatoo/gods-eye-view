@@ -49,3 +49,21 @@ test('keeps grounded fallback contacts and rejects rows without positions', () =
   assert.equal(normalized.states[0][7], null);
   assert.equal(normalized.states[0][8], true);
 });
+
+test('unknown snapshot time cannot become a current observation', () => {
+  const data = normalizeAdsbLolPointResponse({ ac: [{ hex: 'abc123', lat: 1, lon: 2, seen_pos: 1 }] });
+  assert.equal(data.time, null);
+  assert.equal(data.states[0][3], null);
+  assert.equal(data.states[0][4], null);
+});
+
+test('old cached source timestamps survive a newly received response', () => {
+  const data = normalizeAdsbLolPointResponse({ now: 1_700_000_000, ac: [{ hex: 'abc123', lat: 1, lon: 2, seen_pos: 3600 }] });
+  assert.equal(data.states[0][3], 1_699_996_400);
+});
+
+test('recent non-position messages cannot date an unknown position', () => {
+  const data = normalizeAdsbLolPointResponse({ now: 1_700_000_000, ac: [{ hex: 'abc123', lat: 1, lon: 2, seen: 0 }] });
+  assert.equal(data.states[0][3], null);
+  assert.equal(data.states[0][4], 1_700_000_000);
+});

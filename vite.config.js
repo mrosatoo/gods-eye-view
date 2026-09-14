@@ -7794,6 +7794,48 @@ function portWatchProxy() {
   const cache = new Map();
   const CACHE_TTL_MS = 60 * 60 * 1000;
 
+  const PORTWATCH_REGION_IDS = {
+    hormuz: 'Strait of Hormuz',
+    suez: 'Suez Canal',
+    bab: 'Bab el-Mandeb',
+    malacca: 'Strait of Malacca',
+    singapore: 'Singapore Strait',
+    cape: 'Cape of Good Hope',
+  };
+
+  async function tryUpstream(chokepoint) {
+    const regionName = PORTWATCH_REGION_IDS[chokepoint];
+    const encoded = encodeURIComponent(regionName);
+    const url = `https://portwatch.imf.org/portal/sharing/rest/content/items/1670b42f217a4063a05e311b6e067f07/data?region=${encoded}&f=json`;
+    const r = await fetch(url, {
+      signal: AbortSignal.timeout(12000),
+      headers: { Accept: 'application/json' },
+    });
+    if (!r.ok) return null;
+    const body = await r.json();
+    if (!body || typeof body !== 'object') return null;
+    const latest = Array.isArray(body.features) && body.features.length > 0
+      ? body.features[body.features.length - 1]
+      : (body.attributes || body);
+    const attrs = latest?.attributes || latest;
+    if (!attrs) return null;
+    const transitCount = attrs.total_import_export ?? attrs.trade_value ?? attrs.n_trips ?? null;
+    const dateRaw = attrs.date || attrs.Date || attrs.observation_date;
+    const observationDate = dateRaw
+      ? new Date(typeof dateRaw === 'number' ? dateRaw : dateRaw).toISOString().slice(0, 10)
+      : null;
+    if (transitCount == null && !observationDate) return null;
+    return {
+      chokepoint,
+      observationDate,
+      transitCount: transitCount != null ? Math.round(transitCount) : null,
+      avgTransitCount: attrs.baseline ?? attrs.avg_n_trips ?? null,
+      pctChange: attrs.pct_change ?? attrs.percent_change ?? null,
+      sourceRevision: 'imf-portwatch-arcgis',
+      fetchedAt: new Date().toISOString(),
+    };
+  }
+
   return {
     name: 'portwatch-proxy',
     configureServer(server) {
@@ -7815,24 +7857,31 @@ function portWatchProxy() {
           return;
         }
 
-        // PortWatch source admission pending (§4.2).
-        // Exact dataset schema, field mapping, and automated download permission
-        // require admission before integration ships. Return explicit unavailable.
-        const result = {
-          chokepoint,
-          observationDate: null,
-          transitCount: null,
-          avgTransitCount: null,
-          pctChange: null,
-          sourceRevision: null,
-          fetchedAt: new Date().toISOString(),
-          error: 'source_unavailable',
-          admissionStatus: 'pending',
-          admissionNote: 'IMF PortWatch source admission not yet completed. Exact dataset ID, region mapping, fields, and terms need admission per Joint Spec §4.2.',
-        };
+        let result;
+        try {
+          result = await tryUpstream(chokepoint);
+        } catch {
+          result = null;
+        }
 
+        if (!result) {
+          result = {
+            chokepoint,
+            observationDate: null,
+            transitCount: null,
+            avgTransitCount: null,
+            pctChange: null,
+            sourceRevision: null,
+            fetchedAt: new Date().toISOString(),
+            error: 'source_unavailable',
+            admissionStatus: 'pending',
+            admissionNote: 'IMF PortWatch upstream did not return usable data. Exact dataset ID, region mapping, fields, and terms need admission per Joint Spec §4.2.',
+          };
+        }
+
+        const cacheHeader = result.error ? 'ADMISSION-PENDING' : 'MISS';
         cache.set(chokepoint, { ts: now, data: result });
-        res.writeHead(200, { 'Content-Type': 'application/json', 'X-GEV-Cache': 'ADMISSION-PENDING' });
+        res.writeHead(200, { 'Content-Type': 'application/json', 'X-GEV-Cache': cacheHeader });
         res.end(JSON.stringify(result));
       });
     },

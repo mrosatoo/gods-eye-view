@@ -12,7 +12,9 @@ import {
   FIRST_RUN_STORAGE_KEY,
   environmentalLabel,
   exclusiveSurfaceActive,
+  isEmbedBootPath,
   rememberFirstRunSessionDismissed,
+  runEmbedBoot,
   runFirstRunChoice,
   setFirstRunSuppressed,
   shouldShowFirstRun,
@@ -696,4 +698,51 @@ test('every layer a mission drives is already in the shipped set_layer_visibilit
   for (const layerId of missionLayerIds) {
     assert.ok(tool.includes(`'${layerId}'`), `${layerId} must already be an allowed enum value`);
   }
+});
+
+// --- Embed boot path (welcome=0) ---
+
+test('isEmbedBootPath returns true for ?welcome=0', () => {
+  assert.strictEqual(isEmbedBootPath({ search: '?welcome=0' }), true);
+});
+
+test('isEmbedBootPath returns false for ?welcome=1', () => {
+  assert.strictEqual(isEmbedBootPath({ search: '?welcome=1' }), false);
+});
+
+test('isEmbedBootPath returns false when no welcome param', () => {
+  assert.strictEqual(isEmbedBootPath({ search: '' }), false);
+  assert.strictEqual(isEmbedBootPath({ search: '?foo=bar' }), false);
+});
+
+test('isEmbedBootPath returns false for null location', () => {
+  assert.strictEqual(isEmbedBootPath(null), false);
+  assert.strictEqual(isEmbedBootPath(undefined), false);
+});
+
+test('runEmbedBoot enables ais-live-vessels and flies to globe', async () => {
+  const calls = [];
+  const result = await runEmbedBoot({
+    setLayerEnabled: async (id) => { calls.push(`enable:${id}`); return true; },
+    flyToGlobe: async () => { calls.push('flyToGlobe'); },
+  });
+  assert.ok(result.ok);
+  assert.ok(calls.includes('enable:ais-live-vessels'));
+  assert.ok(calls.includes('flyToGlobe'));
+});
+
+test('runEmbedBoot succeeds even if AIS enable fails', async () => {
+  const result = await runEmbedBoot({
+    setLayerEnabled: async () => { throw new Error('fail'); },
+    flyToGlobe: async () => {},
+  });
+  assert.ok(result.ok);
+});
+
+test('runEmbedBoot succeeds even if flyToGlobe fails', async () => {
+  const result = await runEmbedBoot({
+    setLayerEnabled: async () => true,
+    flyToGlobe: async () => { throw new Error('fail'); },
+  });
+  assert.ok(result.ok);
 });

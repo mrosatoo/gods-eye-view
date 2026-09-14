@@ -346,7 +346,7 @@ test('real civil track path creates no native label and publishes every cached h
     assert.equal(entity.label, undefined);
     assert.ok(entities.values.every((candidate) => candidate.label === undefined));
     assert.deepEqual(entity.gevLabelModel, {
-      title: 'N12345 · FL350 · 486 kts',
+      title: 'N12345 · FL350 · 486 kts · AGE UNKNOWN · STALE',
       details: ['TEST AIR · A320', 'AUS → LAX'],
       accent: '#39d0ff',
     });
@@ -1462,4 +1462,74 @@ test('display floor: two contacts on the same cell get their own outputs', () =>
   );
   assert.notEqual(a, b, 'a shared scratch would hand both contacts the same object');
   assert.ok(Math.abs(_floorCarto(a).height - _floorCarto(b).height) < 0.05);
+});
+
+test('fresh snapshot with an hours-old aircraft position is STALE on the first successful poll', async () => {
+  const icao24 = 'a1b2c3';
+  const entity = { gevLabelModel: { title: 'OLD', details: [] } };
+  const billboard = {
+    position: Cesium.Cartesian3.fromDegrees(-97.7, 30.2, 9_000),
+    color: Cesium.Color.WHITE,
+    show: false,
+  };
+  const billboardCollection = { show: false, remove() {} };
+  const viewer = { camera: { positionCartographic: null }, scene: {} };
+  _setTrackedFlightRefreshStateForTest({
+    icao24,
+    entity,
+    billboard,
+    billboardCollection,
+    viewer,
+    meta: {
+      callsign: 'OLD1',
+      altitude: 9_000,
+      renderAltitudeM: 9_050,
+      velocity: 180,
+      true_track: 80,
+      klass: 'airliner',
+      onGround: false,
+      wasAirborne: true,
+      turnRateDps: 0,
+      rawLat: 30.2,
+      rawLon: -97.7,
+    },
+  });
+
+  const realFetch = globalThis.fetch;
+  const nowSec = Math.floor(Date.now() / 1000);
+  let openskyPoll = 0;
+  globalThis.fetch = async (url) => {
+    if (!String(url).startsWith('/api/opensky')) {
+      return { ok: true, status: 200, json: async () => ({ ac: [] }) };
+    }
+    const states = openskyPoll++ === 0
+      ? [[
+        icao24, 'DAL123 ', 'United States', nowSec - 3600, nowSec,
+        -97.6, 30.3, 10_668, false, 250, 95, 5, null, 10_700,
+        null, null, null, 5,
+      ]]
+      : [];
+    return {
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => ({ time: nowSec, states }),
+    };
+  };
+
+  try {
+    await flightsLayer.update(viewer);
+    assert.match([entity.gevLabelModel.title, ...entity.gevLabelModel.details].join(' '), /AGE 3600s · STALE/);
+    assert.equal(flightsLayer.getTrackedInfo().stale, true);
+    assert.match(entity.gevLabelModel.details.join(' · '), /FL350/);
+    assert.match(entity.gevLabelModel.details.join(' · '), /486 kts/);
+
+    await flightsLayer.update(viewer);
+    assert.match(
+      [entity.gevLabelModel.title, ...entity.gevLabelModel.details].join(' · '),
+      /STALE/,
+    );
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });

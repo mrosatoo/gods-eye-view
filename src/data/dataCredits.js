@@ -153,6 +153,13 @@ export const DATA_CREDITS = [
       '<a href="https://terrain.reearth.land" target="_blank" rel="noopener">Re:Earth Terrain</a> / ' +
       'Mapterhorn (CC BY 4.0) / EGM2008 (NGA)',
   },
+  {
+    key: 'imf-portwatch',
+    html:
+      'Chokepoint transit activity: ' +
+      '<a href="https://portwatch.imf.org" target="_blank" rel="noopener">IMF PortWatch</a> ' +
+      '(dated daily activity — not live congestion)',
+  },
   // ── Bundled snapshots ───────────────────────────────────────────
   {
     key: 'datacenters',

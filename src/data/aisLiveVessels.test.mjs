@@ -14,6 +14,7 @@ import {
   cardScreenSeparated,
   reduceVesselSelection,
   vesselDatumHeightM,
+  isPositionEvicted,
   _bindVesselInteractionForTest,
   _setVesselStateForTest,
   _reconcileVesselsForTest,
@@ -1278,7 +1279,7 @@ test('vessel trail lifecycle: reconciliation eviction clears an orphaned trail',
 test('buildVesselCard: name title + type/speed/heading detail line', () => {
   const card = buildVesselCard(makeRecord());
   assert.equal(card.title, 'EVER GIVEN');
-  assert.deepEqual(card.details, ['CONTAINER SHIP · 14.5KT · 231°']);
+  assert.deepEqual(card.details, ['CONTAINER SHIP · 14.5KT · 231° · AGE UNKNOWN · STALE']);
   assert.equal(card.accent, '57, 213, 255');
   assert.equal(card.selected, false);
   assert.equal(card.position, POS);
@@ -1289,9 +1290,9 @@ test('buildVesselCard: name title + type/speed/heading detail line', () => {
 
 test('buildVesselCard: heading falls back to course; missing parts are omitted', () => {
   const card = buildVesselCard(makeRecord({ heading: null, type: '', speed: null }));
-  assert.deepEqual(card.details, ['231°']);
+  assert.deepEqual(card.details, ['231° · AGE UNKNOWN · STALE']);
   const bare = buildVesselCard(makeRecord({ heading: null, course: null, type: '', speed: null }));
-  assert.deepEqual(bare.details, []);
+  assert.deepEqual(bare.details, ['AGE UNKNOWN · STALE']);
 });
 
 test('buildVesselCard: unnamed vessels title as MMSI; long names truncate', () => {
@@ -1314,7 +1315,7 @@ test('buildVesselCard: tanker types carry the amber accent', () => {
 
 test('buildVesselCard: numeric AIS type codes read as family names, not digits', () => {
   const card = buildVesselCard(makeRecord({ type: '84' }));
-  assert.deepEqual(card.details, ['TANKER · 14.5KT · 231°']);
+  assert.deepEqual(card.details, ['TANKER · 14.5KT · 231° · AGE UNKNOWN · STALE']);
   assert.equal(card.accent, '255, 179, 71');
 });
 
@@ -1334,10 +1335,8 @@ test('buildSelectedVesselCard: full detail card with MMSI + position time', () =
   assert.equal(card.id, 'vessel:353136000');
   assert.equal(card.priority, 100000);
   assert.equal(card.title, 'EVER GIVEN');
-  assert.deepEqual(card.details, [
-    'CONTAINER SHIP · 14.5KT · 231°',
-    'MMSI 353136000 · POS: 11:22:33Z',
-  ]);
+  assert.equal(card.details[0], 'CONTAINER SHIP · 14.5KT · 231°');
+  assert.match(card.details[1], /MMSI 353136000 · POS: 2026-07-27T11:22:33.000Z · AGE \d+s · STALE$/);
 });
 
 test('vessel host publication preserves the shipped grid winner and separation selector', () => {
@@ -1450,7 +1449,7 @@ test('buildSelectedVesselCard: destination line + STALE marker; placeholders for
   assert.deepEqual(card.details, [
     'TANKER · --KT · --°',
     '→ ROTTERDAM',
-    'MMSI 353136000 · POS: TIME UNKNOWN · STALE',
+    'MMSI 353136000 · POS: TIME UNKNOWN · AGE UNKNOWN · STALE',
   ]);
 });
 
@@ -1640,4 +1639,37 @@ test('a vessel analyst record carries the MMSI the tracker keys on', () => {
   const nameless = mapAnalystRecord({ mmsi: '366999124', name: null, lat: 37.9, lon: -122.5 });
   assert.equal(nameless.id, '366999124');
   assert.equal(nameless.mmsi, '366999124');
+});
+
+test('both vessel cards reject an hours-old position even with successful polls', () => {
+  const record = makeRecord({ lastPositionUtc: new Date(Date.now() - 3_600_000).toISOString(), missedRefreshes: 0 });
+  for (const card of [buildVesselCard(record), buildSelectedVesselCard(record)]) {
+    assert.match(card.details.join(' '), /AGE 3600s · STALE/);
+  }
+});
+
+// --- Hard freshness eviction ---
+test('isPositionEvicted drops positions older than 15 minutes', () => {
+  const now = 1_800_000_000_000;
+  const fresh = { lastPositionEpoch: now - 60_000, lastPositionUtc: '' };
+  assert.equal(isPositionEvicted(fresh, now), false);
+  const borderline = { lastPositionEpoch: now - 900_000, lastPositionUtc: '' };
+  assert.equal(isPositionEvicted(borderline, now), false);
+  const stale = { lastPositionEpoch: now - 900_001, lastPositionUtc: '' };
+  assert.equal(isPositionEvicted(stale, now), true);
+  const ancient = { lastPositionEpoch: now - 86_400_000, lastPositionUtc: '' };
+  assert.equal(isPositionEvicted(ancient, now), true);
+});
+
+test('isPositionEvicted falls back to lastPositionUtc when epoch is absent', () => {
+  const now = 1_800_000_000_000;
+  const utc = new Date(now - 1_000_000).toISOString();
+  assert.equal(isPositionEvicted({ lastPositionUtc: utc }, now), true);
+  const fresh = new Date(now - 60_000).toISOString();
+  assert.equal(isPositionEvicted({ lastPositionUtc: fresh }, now), false);
+});
+
+test('isPositionEvicted keeps rows with unknown timestamps', () => {
+  assert.equal(isPositionEvicted({ lastPositionEpoch: null, lastPositionUtc: '' }, Date.now()), false);
+  assert.equal(isPositionEvicted({}, Date.now()), false);
 });

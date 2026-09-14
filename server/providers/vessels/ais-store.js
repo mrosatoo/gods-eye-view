@@ -1,6 +1,7 @@
+import { AIS_POSITION_SLA_MS, sourceFreshness } from '../../../src/data/sourceFreshness.js';
 import { isRecognizedAisEnvelope } from '../../../src/data/aisStreamAdapter.js';
 export const AISSTREAM_CACHE_MAX = 50000;
-export const AISSTREAM_STALE_MS = 30 * 60 * 1000;
+export const AISSTREAM_STALE_MS = AIS_POSITION_SLA_MS;
 // Per-MMSI recent-path ring buffers (PRD WS-F F3). Float32 lat/lon (~1m
 // precision, fine for 25m thinning) + Uint32 epoch seconds ≈ 12B/sample;
 // 64 samples × 50k MMSIs worst case ≈ 38MB. Tracks exist only while the dev
@@ -51,6 +52,8 @@ export function ingestAisStreamEnvelope(envelope) {
     };
     _aisStreamStatic.set(mmsi, staticData);
     mergeAisStaticIntoLiveVessel(mmsi, staticData);
+    // Static metadata may include a cached location, not a new position fix.
+    return true;
   }
 
   const lat = numberValue(
@@ -63,6 +66,13 @@ export function ingestAisStreamEnvelope(envelope) {
   // delivering AIS traffic, so it counts as liveness.
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return true;
 
+  const positionUtc = normalizeAisTimestamp(metadata.time_utc ?? metadata.TimeUtc);
+  const positionMs = Date.parse(positionUtc);
+  // Receipt proves transport activity only. Unknown, stale, and future fixes
+  // cannot enter the live layer or replace a newer position.
+  if (sourceFreshness(positionMs, AISSTREAM_STALE_MS).stale) return true;
+  const existing = _aisStreamVessels.get(mmsi);
+  if (existing && Date.parse(existing.last_position_UTC) > positionMs) return true;
   const staticData = _aisStreamStatic.get(mmsi) || {};
   _aisStreamVessels.set(mmsi, {
     lat,
@@ -220,19 +230,19 @@ function vesselTypeFromAis(message, staticData = {}) {
 }
 
 export function aisStreamRows(maxRows) {
-  const cutoff = Date.now() - AISSTREAM_STALE_MS;
+  pruneAisStreamCache();
   const rows = [];
   for (const row of _aisStreamVessels.values()) {
-    if (row._updatedAt >= cutoff) rows.push(row);
+    rows.push(row);
   }
-  rows.sort((a, b) => b._updatedAt - a._updatedAt);
+  rows.sort((a, b) => b.last_position_epoch - a.last_position_epoch);
   return rows.slice(0, maxRows).map(({ _updatedAt, ...row }) => row);
 }
 
 function pruneAisStreamCache() {
   const cutoff = Date.now() - AISSTREAM_STALE_MS;
   for (const [mmsi, row] of _aisStreamVessels) {
-    if (row._updatedAt < cutoff) {
+    if (sourceFreshness(Date.parse(row.last_position_UTC), AISSTREAM_STALE_MS).stale) {
       _aisStreamVessels.delete(mmsi);
       _aisStreamTracks.delete(mmsi);
       _aisStreamTrackPending.delete(mmsi);

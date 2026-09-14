@@ -1,4 +1,4 @@
-import { initFirstRunExperience } from '../firstRunExperience.js';
+import { initFirstRunExperience, isEmbedBootPath, runEmbedBoot } from '../firstRunExperience.js';
 import { initKeySetup } from '../keySetup.js';
 
 /** Reveal welcome controls only after restoration and the loading transition. */
@@ -33,6 +33,12 @@ export function startStandaloneChrome({
         once: true,
       });
       revealTimer = setTimeout(revealFirstRun, 900);
+      if (isEmbedBootPath()) {
+        void runEmbedBoot({
+          setLayerEnabled: (id) => dataManager.setEnabled(id, true, { origin: 'tool' }),
+          flyToGlobe: () => styleManager.resetToGlobeView(),
+        }).catch(() => {});
+      }
     });
   const keySetup = initKeySetup({ signal });
   // Own the pending initializer too; it must not reveal a dialog after abort.

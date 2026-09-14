@@ -18,6 +18,7 @@ import emscQuakes from '../data/emscQuakes.js';
 import nwsAlerts from '../data/nwsAlerts.js';
 import marineWeather from '../data/marineWeather.js';
 import { LAYER_STATE_REGISTRY } from '../data/layerState.js';
+import { createChokeDensityHud } from '../ui/chokeDensityHud.js';
 
 /** Register the standalone layer catalog before allowing state restoration. */
 export function createStandaloneData({
@@ -83,6 +84,16 @@ export function createStandaloneData({
   }
   dataManager.buildTogglePanel(document.getElementById('data-toggles'));
   styleManager.attachDataManager(dataManager);
+
+  const chokeDensityHost = document.getElementById('choke-density-hud');
+  let chokeDensityHud = null;
+  if (chokeDensityHost) {
+    chokeDensityHud = createChokeDensityHud({
+      aisLayer: aisLiveVesselsLayer,
+      host: chokeDensityHost,
+    });
+    defer(() => chokeDensityHud?.destroy());
+  }
 
   return { dataManager };
 }

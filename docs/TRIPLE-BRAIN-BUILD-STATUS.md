@@ -1,5 +1,60 @@
 # Triple Brain Build Status
 
+### Claude OSA-42 — TB6 FULL FINISH live freshness + thesis clarity — 2026-09-14
+
+#### Freshness SLAs (production enforcement)
+
+| Source | SLA | Module | Behavior when exceeded |
+|--------|-----|--------|----------------------|
+| AIS vessel positions | 300 s (5 min) | `sourceFreshness.js:AIS_POSITION_SLA_MS` | AGE Ns · STALE in chip/card/HUD; layer chip shows STALE |
+| adsb.lol / OpenSky aircraft | 120 s (2 min) | `sourceFreshness.js:AIR_POSITION_SLA_MS` | AGE Ns · STALE in chip; tracked label ages independently |
+| Aircraft source snapshot | 120 s (2 min) | `flights.js:SOURCE_STALE_MS` | Feed-level STALE; individual contact age separate |
+| PortWatch observations | observation-date based | `portWatchOverlay.js` | Freshness distribution shown; expiry on observation age |
+
+Unknown, invalid, and future (>30 s ahead) observation clocks fail closed as STALE. The AIS server store rejects unknown/bad/stale timestamps — those positions never enter the live vessel map. Receipt time is never substituted for observation time.
+
+#### Implementation completed
+
+1. **Live freshness** — AIS and adsb.lol layer chips show acquisition age via `sourceAgeLabel` in `layerPanel.js`. AIS HUD and vessel cards show full UTC observation time + age. Flights tracked label shows per-contact age. STALE markers surface in all display paths.
+
+2. **Disruption strip wired** — `DisruptionStripController` instantiated in `contextBindings.js`, connected to the DISRUPTION tab in the global context panel. Fetches FIRMS NRT detections, USGS 24h earthquakes, AIS low-SOG candidates, and headline signal. Shows honest `source_unavailable` for missing feeds. Lifecycle managed: enabled/disabled on tab toggle, destroyed on context teardown.
+
+3. **Thesis defaults verified** — `thesisDefaults.js`: AIS, local-firms, satellites, flights, portwatch ON; CCTV, traffic, radio, bikeshare, military OFF. No thesis-irrelevant layers enabled by default.
+
+4. **AIS source time tests updated** — `aisSourceTime.test.mjs` now verifies that unknown/bad timestamps are rejected at ingest (never enter vessel map), valid timestamps are normalized to ISO, replay/older fixes are ignored, and positions expire after SLA.
+
+#### Verification
+
+- **328 focused tests passed, 0 failed**: aisStuckDetection, aisSourceTime, layerState, sourceFreshness, disruptionContext, portWatchOverlay, aisLiveVessels (incl. analyst), flights, adsbLolFallback, firmsCards, firmsInteraction, spaceProviders, satelliteClass, satelliteProvenance, researchAdmission, regionalBrief.
+- `git diff --check`: no whitespace violations.
+- No secrets committed.
+- MF-11 research admission gate intact: GDACS, EMSC, NWS, marine routes return 503.
+
+#### Remaining for Astra acceptance
+
+- Browser acceptance of disruption strip rendering with live/degraded feeds ([OSA-41](/OSA/issues/OSA-41))
+- PortWatch real data requires §4.2 source admission
+- AIS key-dependent live vessel verification
+- Phase B deferred per Approve #1
+
+---
+
+### Astra live-versus-stale enforcement — 2026-09-14 ([OSA-43](/OSA/issues/OSA-43))
+
+Freshness implementation verified with 179 focused tests. Final thesis-pack browser acceptance remains pending [OSA-41](/OSA/issues/OSA-41), whose existing dependencies are [OSA-38](/OSA/issues/OSA-38), [OSA-39](/OSA/issues/OSA-39), and [OSA-40](/OSA/issues/OSA-40).
+
+| Source | Freshness policy | Age basis and visible behavior |
+| --- | --- | --- |
+| AIS vessel positions | STALE above 300 seconds | Original `lastPositionUtc`, never successful poll receipt time. Ambient cards show AGE; selected card/HUD show full UTC observation date/time and AGE. Unknown/invalid clocks are AGE UNKNOWN · STALE. Feed stats expose newest retained observation age separately from acquisition time. |
+| OpenSky / adsb.lol aircraft positions | STALE above 120 seconds | OpenSky `time_position`; adsb.lol response `now` minus `seen_pos`. Missing `seen_pos` or response `now` remains unknown rather than being replaced with message or browser receipt time. Tracked label and contact state age independently of successful polls. |
+| Aircraft source snapshot | STALE above 120 seconds | Source response time preserved in feed stats; AGE UNKNOWN is stale. Feed age is distinct from individual contact age: a fresh response may contain hours-old positions. |
+
+- A future observation clock more than 30 seconds ahead fails closed as unknown/stale. Limits are inclusive at the exact SLA; one millisecond beyond expires. Successful repeated responses cannot renew old observations.
+- Source-age evidence in this verification is deterministic: 3,600-second-old observations are marked STALE even on a successful poll; null/invalid/future clocks fail closed. No current live-upstream ages were sampled in this heartbeat, and no claim of live source availability is made.
+- Validation: `node --test src/data/sourceFreshness.test.mjs src/data/adsbLolFallback.test.mjs src/data/aisLiveVessels.test.mjs src/data/aisLiveVessels.analyst.test.mjs src/data/aisSourceTime.test.mjs src/data/aisStreamAdapter.test.mjs src/data/flights.test.mjs` — 179 passed, zero failed. These exercise normalization, actual aircraft update/label generation, vessel card generation, and source-clock preservation; they are not full browser/globe acceptance.
+- Remaining gate owned by Astra in [OSA-41](/OSA/issues/OSA-41): inspect the integrated Cyan/Gold HUD and actual source-loss/aging display; reject stale AIS/adsb without STALE or timestamp, fake-live PortWatch, invented disruption/closure claims, Conf/Edge leakage, or default noise layers. Claude owns completion of the three linked thesis deliverables. Existing source-admission constraints remain in force.
+
+
 ### Astra TB6 red-team baseline — 2026-09-14
 
 **Final pack acceptance pending implementation.** Reviewed checkout `d9cc767` for [OSA-41](/OSA/issues/OSA-41); the three implementation issues were still in progress. This is baseline evidence, not approval of unlanded TB6 work. Final review depends on Claude completing [OSA-38](/OSA/issues/OSA-38), [OSA-39](/OSA/issues/OSA-39), and [OSA-40](/OSA/issues/OSA-40).
