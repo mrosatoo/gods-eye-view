@@ -3302,3 +3302,47 @@ test('panel remount releases old listeners and destruction revokes retained cont
     else globalThis.document = originalDocument;
   }
 });
+
+test('a layer without update() activates successfully through _doToggle', async () => {
+  const calls = { init: 0, enable: 0, disable: 0 };
+  const noUpdateModule = {
+    id: 'portwatch-test',
+    name: 'PortWatch Test',
+    icon: '',
+    source: 'test',
+    init() { calls.init++; },
+    enable() { calls.enable++; return { available: true }; },
+    disable() { calls.disable++; },
+    getStats() { return { enabled: calls.enable > calls.disable, count: 0 }; },
+  };
+  const manager = new DataLayerManager({});
+  manager.register(noUpdateModule);
+  assert.equal(manager.isEnabled('portwatch-test'), false);
+  await manager.setEnabled('portwatch-test', true, { origin: 'programmatic' });
+  assert.equal(manager.isEnabled('portwatch-test'), true, 'layer without update() must settle as enabled');
+  assert.equal(calls.init, 1);
+  assert.equal(calls.enable, 1);
+  await manager.setEnabled('portwatch-test', false, { origin: 'programmatic' });
+  assert.equal(manager.isEnabled('portwatch-test'), false);
+  assert.equal(calls.disable, 1);
+  await manager.destroyAll();
+});
+
+test('a layer without update() does not get a periodic refresh loop', async () => {
+  const noUpdateModule = {
+    id: 'no-update-layer',
+    name: 'No Update',
+    icon: '',
+    source: 'test',
+    init() {},
+    enable() {},
+    disable() {},
+    getStats() { return {}; },
+  };
+  const manager = new DataLayerManager({});
+  manager.register(noUpdateModule);
+  await manager.setEnabled('no-update-layer', true, { origin: 'programmatic' });
+  const entry = manager.layers.get('no-update-layer');
+  assert.equal(entry.intervalId, null, 'no periodic interval for update-less modules');
+  await manager.destroyAll();
+});

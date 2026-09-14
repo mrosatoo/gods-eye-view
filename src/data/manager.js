@@ -253,6 +253,7 @@ export class DataLayerManager {
     let result;
     let failure = null;
     try {
+      if (typeof entry.module.update !== 'function') return false;
       result = await entry.module.update(this.viewer, { signal });
       // Poll-tick entity refreshes don't auto-render in idle mode. Fires on
       // any non-throwing update — a rejected/partial refresh may still have
@@ -848,18 +849,21 @@ export class DataLayerManager {
       }
       if (signal?.aborted) return finishCancelledEnable('enable');
 
-      // First update immediately
-      this._setVisibilityIntentPhase(entry, intentEpoch, 'update');
-      try {
-        const updated = await entry.module.update(this.viewer, { signal });
-        if (updated === false) throw lifecycleRejectedError(layerId, 'update');
-      } catch (e) {
-        if (signal?.aborted || isAbortError(e)) {
-          return finishCancelledEnable('update', isAbortError(e) && !signal?.aborted);
+      // First update immediately — layers that manage their own refresh
+      // (portwatch, gdacs-alerts, etc.) omit update() and skip this step.
+      if (typeof entry.module.update === 'function') {
+        this._setVisibilityIntentPhase(entry, intentEpoch, 'update');
+        try {
+          const updated = await entry.module.update(this.viewer, { signal });
+          if (updated === false) throw lifecycleRejectedError(layerId, 'update');
+        } catch (e) {
+          if (signal?.aborted || isAbortError(e)) {
+            return finishCancelledEnable('update', isAbortError(e) && !signal?.aborted);
+          }
+          return finishFailedEnable('update', e);
         }
-        return finishFailedEnable('update', e);
+        if (signal?.aborted) return finishCancelledEnable('update');
       }
-      if (signal?.aborted) return finishCancelledEnable('update');
       entry.managerRefreshError = null;
 
       entry.enabled = true;

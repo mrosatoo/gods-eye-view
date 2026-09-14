@@ -1,5 +1,40 @@
 # Triple Brain Build Status
 
+### Claude OSA-48 round 5 — PortWatch activation + honest failure reporting — 2026-09-14
+
+Addresses two lifecycle defects found by Astra at 64d78c2.
+
+| Defect | Fix applied | Verification |
+|--------|-------------|--------------|
+| **PortWatch activation: _doToggle TypeError** | Guard `entry.module.update()` call with `typeof === 'function'` check. Layers without `update` (portwatch, gdacs-alerts, emsc-quakes, nws-alerts, marine-weather) now skip the initial update step and settle as enabled directly. Same guard added to `_runPeriodicUpdate`. | 2 new manager tests: update-less module activates successfully, no periodic interval armed. 110/110 manager tests pass. |
+| **Noise disabling swallowed into ok:true** | `runFirstRunChoice` and `runEmbedBoot` now track all thesis-default outcomes (enable and disable). Failed disables report `layerId` in `failedLayerIds`; `ok` is false when any thesis default fails. Rejected or false-returning `setLayerDisabled` calls are no longer swallowed. | 2 new first-run tests: thrown disable → ok:false with CCTV/traffic in failedLayerIds; false-returning disable → ok:false. runEmbedBoot failure test updated for honest reporting. 48/48 first-run tests pass. |
+
+**Tests:** 217/217 across all affected suites (manager: 110, firstRunExperience: 48, disruptionContext: 31, disruptionStrip: 7, chokeDensityHud: 22). Zero regressions.
+
+**Not claimed:** Final Astra browser acceptance. [OSA-48](/OSA/issues/OSA-48) awaits Astra re-review.
+
+---
+
+### Astra 64d78c2 review — 2026-09-14
+
+**Restored Shipping normal path now passes; acceptance still blocked on lifecycle failure handling.** [OSA-48](/OSA/issues/OSA-48) remains the existing remediation owner for [OSA-41](/OSA/issues/OSA-41).
+
+| Order / thesis mapping | Verified result |
+| --- | --- |
+| 1 — Chokes / WTI transit context; Gold/Risk disruption context | Actual restored local state starts traffic+cctv. Production Shipping callback path now ends flights+satellites+AIS+FIRMS; CCTV and traffic are OFF. The same result holds after embed boot. However a concrete rejected-disable fixture leaves CCTV/traffic ON while runFirstRunChoice reports ok:true and no failures. Noise exclusion must be part of the success gate, not swallowed. |
+| 3 — Disruption / dated energy and macro corroboration | Previous FIRMS parser-date, expired-AIS and source-loss browser probes all continue to pass. Selected-vessel card renders UTC observation plus AGE 3600s / STALE. Global scope remains explicit. |
+| 2 — PortWatch / dated transit baseline | API honesty passes: source_unavailable/admission pending with null clocks. UI activation FAIL: after settled real Shipping and embed calls, module enabled=false, six unavailable results cached. Root cause: DataLayerManager._doToggle unconditionally awaits module.update; portWatchOverlay defines no update method. Manager therefore rolls activation back. Mission ignores the failed thesis enable and returns success. Honest unavailable context must be able to remain visible without admitting live data. |
+
+**Aircraft browser verification added:** An isolated Chromium fixture imports the production flights module, seeds a tracked flight using its test seam, and runs its real update/poll code against a fresh source snapshot containing a one-hour-old position. Production label model rendered `FL350 · 486 kts · AGE 3600s · STALE`; after the next successful empty snapshot, the retained label stayed STALE. getTrackedInfo().stale=true. Screenshot and JSON captured. This proves browser execution of the production poll/label path under controlled data, not live upstream continuity or photorealistic geometry. An initial direct Cesium-source import failed due to CommonJS interop; the final successful run used the app's actual Vite-optimized Cesium module.
+
+**Verification:** 338/338 focused tests pass on Node 24.14.0; git diff --check passes. Actual application browser used port 4174 and a temporary isolated profile seeded with restored noise ON. Aircraft fixture used a separate isolated page. Source implementation was not changed. No service, preview, or commit was produced by this review. Evidence is the browser script/JSON/screenshot, aircraft fixture outputs, and test log.
+
+**Required closure:** Implement the PortWatch lifecycle contract so the actual manager can enable and retain its dated/unavailable cards, with no duplicate refresh loops or late results after disable. Test manager activation and settled UI. In Shipping and embed thesis entry, treat required noise-disable failure as failure, report exact failed layer IDs, and do not claim ok:true with noise still enabled. Verify actual production callback wiring, including false returns and rejected promises. Preserve successful non-thesis flows and the source-honesty fixes.
+
+**Residual boundaries:** No Conf/Edge connection or canal-blocked claims found in reviewed modules. All features remain WTI/Gold/Risk context rather than causal market signals. PortWatch remains unadmitted, and real source data is not required for this lifecycle repair. Previously unverified corridor percentage claims remain contextual limitations. Final combined pack acceptance is withheld until the two remaining lifecycle gates are verified.
+
+---
+
 ### Claude OSA-48 round 4 — shipping mission thesis defaults — 2026-09-14
 
 Addresses the final scope gate: `runFirstRunChoice('shipping')` now applies `THESIS_LAYER_DEFAULTS`, disabling noise layers (CCTV, traffic, radio, bikeshare, military) that may have been restored from localStorage. Previously only `runEmbedBoot` applied thesis defaults; the visible Shipping mission path only enabled AIS without disabling noise.

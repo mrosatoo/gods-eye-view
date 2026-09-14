@@ -275,16 +275,24 @@ export async function runFirstRunChoice(choice, { setContextMode, setLayerEnable
     .catch(() => null);
 
   // Apply thesis defaults: disable noise layers restored from localStorage,
-  // enable thesis layers beyond the mission's own layerIds. Mission-specific
-  // layers are the success gate; thesis defaults are best-effort.
+  // enable thesis layers beyond the mission's own layerIds. Failed disables
+  // are reported honestly — noise left ON is not a successful thesis entry.
   const missionSet = new Set(mission.layerIds);
   const thesisOps = [];
   for (const [layerId, enabled] of Object.entries(THESIS_LAYER_DEFAULTS)) {
     if (missionSet.has(layerId)) continue;
     if (enabled) {
-      thesisOps.push(setLayerEnabled(layerId).catch(() => {}));
+      thesisOps.push(
+        setLayerEnabled(layerId)
+          .then((r) => ({ layerId, ok: r !== false }))
+          .catch(() => ({ layerId, ok: false })),
+      );
     } else if (typeof setLayerDisabled === 'function') {
-      thesisOps.push(setLayerDisabled(layerId).catch(() => {}));
+      thesisOps.push(
+        setLayerDisabled(layerId)
+          .then((r) => ({ layerId, ok: r !== false }))
+          .catch(() => ({ layerId, ok: false })),
+      );
     }
   }
 
@@ -295,9 +303,12 @@ export async function runFirstRunChoice(choice, { setContextMode, setLayerEnable
       return { layerId, ok: false };
     }
   }));
-  await Promise.allSettled(thesisOps);
+  const thesisResults = await Promise.all(thesisOps);
   await flight;
-  const failedLayerIds = outcomes.filter((entry) => !entry.ok).map((entry) => entry.layerId);
+  const failedLayerIds = [
+    ...outcomes.filter((e) => !e.ok).map((e) => e.layerId),
+    ...thesisResults.filter((e) => !e.ok).map((e) => e.layerId),
+  ];
   return { ok: failedLayerIds.length === 0, choice, failedLayerIds };
 }
 
@@ -699,12 +710,21 @@ export async function runEmbedBoot({ setLayerEnabled, setLayerDisabled, flyToGlo
   const ops = [];
   for (const [layerId, enabled] of Object.entries(THESIS_LAYER_DEFAULTS)) {
     if (enabled) {
-      ops.push(setLayerEnabled(layerId).catch(() => {}));
+      ops.push(
+        setLayerEnabled(layerId)
+          .then((r) => ({ layerId, ok: r !== false }))
+          .catch(() => ({ layerId, ok: false })),
+      );
     } else if (typeof setLayerDisabled === 'function') {
-      ops.push(setLayerDisabled(layerId).catch(() => {}));
+      ops.push(
+        setLayerDisabled(layerId)
+          .then((r) => ({ layerId, ok: r !== false }))
+          .catch(() => ({ layerId, ok: false })),
+      );
     }
   }
-  await Promise.allSettled(ops);
+  const results = await Promise.all(ops);
   await flight;
-  return { ok: true };
+  const failedLayerIds = results.filter((r) => !r.ok).map((r) => r.layerId);
+  return { ok: failedLayerIds.length === 0, failedLayerIds };
 }

@@ -734,13 +734,16 @@ test('runEmbedBoot applies thesis defaults and flies to globe', async () => {
   assert.ok(!enabled.includes('traffic'), 'traffic must not be enabled');
 });
 
-test('runEmbedBoot succeeds even if enable/disable fails', async () => {
+test('runEmbedBoot reports failures honestly when enable/disable throws', async () => {
   const result = await runEmbedBoot({
     setLayerEnabled: async () => { throw new Error('fail'); },
     setLayerDisabled: async () => { throw new Error('fail'); },
     flyToGlobe: async () => {},
   });
-  assert.ok(result.ok);
+  assert.equal(result.ok, false, 'failed enables/disables must not be swallowed');
+  assert.ok(result.failedLayerIds.length > 0, 'failed layer IDs must be reported');
+  assert.ok(result.failedLayerIds.includes('ais-live-vessels'), 'failed AIS enable reported');
+  assert.ok(result.failedLayerIds.includes('cctv'), 'failed CCTV disable reported');
 });
 
 test('runEmbedBoot succeeds even if flyToGlobe fails', async () => {
@@ -759,6 +762,7 @@ test('runEmbedBoot works without setLayerDisabled', async () => {
     flyToGlobe: async () => {},
   });
   assert.ok(result.ok);
+  assert.deepEqual(result.failedLayerIds, []);
   assert.ok(enabled.includes('ais-live-vessels'));
 });
 
@@ -786,12 +790,21 @@ test('shipping mission enables thesis-true layers beyond its own layerIds', asyn
   assert.ok(spy.calls.layerIds.includes('portwatch'), 'portwatch enabled via thesis defaults');
 });
 
-test('globe mission thesis disables are best-effort — failures do not break the mission', async () => {
+test('failed noise disabling reports failure honestly — not swallowed into ok:true', async () => {
   const spy = missionSpy();
   spy.deps.setLayerDisabled = async () => { throw new Error('refused'); };
   const outcome = await runFirstRunChoice('shipping', spy.deps);
-  assert.equal(outcome.ok, true, 'mission succeeds despite disable failures');
-  assert.deepEqual(outcome.failedLayerIds, []);
+  assert.equal(outcome.ok, false, 'mission must fail when noise disabling fails');
+  assert.ok(outcome.failedLayerIds.includes('cctv'), 'failed CCTV disable reported');
+  assert.ok(outcome.failedLayerIds.includes('traffic'), 'failed traffic disable reported');
+});
+
+test('false-returning setLayerDisabled is reported as failure', async () => {
+  const spy = missionSpy();
+  spy.deps.setLayerDisabled = async () => false;
+  const outcome = await runFirstRunChoice('shipping', spy.deps);
+  assert.equal(outcome.ok, false);
+  assert.ok(outcome.failedLayerIds.includes('cctv'));
 });
 
 test('globe mission works without setLayerDisabled callback', async () => {
