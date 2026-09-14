@@ -36,6 +36,7 @@ export function startStandaloneChrome({
       if (isEmbedBootPath()) {
         void runEmbedBoot({
           setLayerEnabled: (id) => dataManager.setEnabled(id, true, { origin: 'tool' }),
+          setLayerDisabled: (id) => dataManager.setEnabled(id, false, { origin: 'tool' }),
           flyToGlobe: () => styleManager.resetToGlobeView(),
         }).catch(() => {});
       }

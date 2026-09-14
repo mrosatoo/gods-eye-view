@@ -58,10 +58,10 @@ async function fetchPortWatch(chokepoint) {
     const res = await _fetchImpl(`/api/portwatch?chokepoint=${encodeURIComponent(chokepoint)}`, {
       signal: AbortSignal.timeout(15000),
     });
-    if (!res.ok) return { chokepoint, error: 'upstream_error', fetchedAt: new Date().toISOString() };
+    if (!res.ok) return { chokepoint, error: 'upstream_error', fetchedAt: null };
     return await res.json();
   } catch {
-    return { chokepoint, error: 'fetch_failed', fetchedAt: new Date().toISOString() };
+    return { chokepoint, error: 'fetch_failed', fetchedAt: null };
   }
 }
 
@@ -82,6 +82,7 @@ function classifyFreshness(data) {
   const obs = new Date(data.observationDate);
   if (isNaN(obs.getTime())) return 'undated';
   const diffMs = Date.now() - obs.getTime();
+  if (diffMs < 0) return 'stale';
   const days = Math.floor(diffMs / (24 * 60 * 60 * 1000));
   if (days <= 2) return 'recent';
   if (days <= 7) return 'dated';

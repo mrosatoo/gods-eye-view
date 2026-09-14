@@ -259,6 +259,7 @@ export function mapAnalystRecord(record) {
     shipType: text(record?.type),
     destination: text(record?.destination),
     navStatus: null,
+    sourceTimestamp: text(record?.lastPositionUtc),
   };
 }
 

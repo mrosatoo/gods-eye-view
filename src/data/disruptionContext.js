@@ -182,6 +182,6 @@ export function aggregateDisruptionContext({
     headlines: headlineSummary,
     allCards,
     status: overallStatus,
-    fetchedAt: new Date().toISOString(),
+    aggregatedAt: new Date().toISOString(),
   };
 }

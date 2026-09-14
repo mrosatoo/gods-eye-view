@@ -52,7 +52,7 @@ function statusCssClass(status) {
 
 function statusText(status) {
   switch (status) {
-    case 'nominal': return 'LIVE';
+    case 'nominal': return 'NOMINAL';
     case 'partial': return 'PARTIAL';
     case 'source_unavailable': return 'SOURCES UNAVAILABLE';
     case 'empty': return 'NO SIGNALS';
@@ -130,8 +130,8 @@ export function renderDisruptionStrip(context) {
   }
 
   const footer = el('div', 'disruption-strip-footer');
-  footer.textContent = context.fetchedAt
-    ? `Updated ${new Date(context.fetchedAt).toLocaleTimeString()} · Lagebild only`
+  footer.textContent = context.aggregatedAt
+    ? `Aggregated ${new Date(context.aggregatedAt).toLocaleTimeString()} · Lagebild only`
     : 'Lagebild only · never feeds Conf';
   container.appendChild(footer);
 
@@ -139,9 +139,10 @@ export function renderDisruptionStrip(context) {
 }
 
 export class DisruptionStripController {
-  constructor({ hostElement, dataManager = null } = {}) {
+  constructor({ hostElement, dataManager = null, chokepoint = null } = {}) {
     this._host = hostElement;
     this._dataManager = dataManager;
+    this._chokepoint = chokepoint;
     this._timer = null;
     this._enabled = false;
     this._lastContext = null;
@@ -222,10 +223,23 @@ export class DisruptionStripController {
   _getAisData() {
     if (!this._dataManager) return null;
     const aisLayer = this._dataManager.layers?.get?.('ais-live-vessels');
-    if (!aisLayer?.getAnalystRecords) return null;
+    if (!aisLayer) return null;
+    const enabled = typeof aisLayer.isEnabled === 'function'
+      ? aisLayer.isEnabled() : true;
+    if (!enabled) return { vessels: [], chokepoint: this._chokepoint ?? null };
+    if (!aisLayer.getAnalystRecords) return null;
     try {
       const records = aisLayer.getAnalystRecords(5000);
-      return { vessels: records, chokepoint: null };
+      const vessels = records.map((r) => ({
+        mmsi: r.mmsi,
+        lat: r.lat,
+        lon: r.lon,
+        sog: r.speedKts ?? null,
+        navStatus: r.navStatus ?? null,
+        sourceTimestamp: r.sourceTimestamp ?? null,
+        receiptTimestamp: null,
+      }));
+      return { vessels, chokepoint: this._chokepoint ?? null };
     } catch {
       return null;
     }

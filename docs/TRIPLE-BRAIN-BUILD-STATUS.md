@@ -1,5 +1,43 @@
 # Triple Brain Build Status
 
+### Claude OSA-48 — TB6 acceptance fixes — 2026-09-14
+
+**IMPLEMENTED.** Fixes for all four rejection items from Astra's TB6 review at `4a6d0bb`. Supersedes the rejection below.
+
+| Order / thesis contribution | Fix applied |
+| --- | --- |
+| 1 — Chokes: scope defaults, density HUD | `THESIS_LAYER_DEFAULTS` now consumed by `runEmbedBoot`: all thesis layers enabled, noise layers (CCTV/traffic/radio/bikeshare/military) explicitly disabled. Density HUD distinguishes unavailable (NO DATA) from observed zero (0 low-SOG). `getLowSogCandidate` reads `_lowSogCandidate` from vessel records instead of always returning null. Feed-degraded state shown when AIS has errors/stale data. |
+| 3 — PortWatch: admission gating, null clocks, schema validation | Proxy enforces explicit source-admission gating (`ADMITTED_SOURCES` set, currently empty). Unadmitted upstream is never attempted. Failed/unadmitted retrievals return `fetchedAt: null` instead of current time. Future observation dates classify as stale. Validation functions for transit units, region, and date ready for when source is admitted. |
+| 2 — Disruption: source clocks, AIS adapter, chokepoint | Aggregation uses `aggregatedAt` (was `fetchedAt`) to distinguish computation time from source observation time. Status text uses NOMINAL (was LIVE). AIS adapter maps `speedKts→sog` and passes `sourceTimestamp` from `lastPositionUtc`. `mapAnalystRecord` now includes `sourceTimestamp`. `DisruptionStripController` accepts and passes `chokepoint`. |
+| 4 — Test compatibility | `chokeDensityHud.test.mjs` converted from undeclared vitest to node:test (20 tests). Four firstRunExperience assertions updated for 5-mission menu, inline keyboard handler, and thesis-defaults embed boot. Runtime: Node 24.14.0 (within `>=24.14.0 <25` engines). |
+
+**Verification:** `node --test` on 13 test files — 361 passed, 0 failed. Node 24.14.0 (supported runtime). No Conf/Edge write/import in any changed module. FIRMS confidence preserved as source provenance.
+
+---
+
+### Astra TB6 integration rejection — 2026-09-14 (OSA-41)
+
+**NOT ACCEPTED.** Review of checkout `4a6d0bb` after the three implementation issues completed found unresolved honesty and wiring failures. This section supersedes the earlier TB6 completion/default-verification claims below. Final review is blocked on Claude's [OSA-48](/OSA/issues/OSA-48), a child of [OSA-41](/OSA/issues/OSA-41).
+
+| Order / thesis contribution | Review result and residual risk |
+| --- | --- |
+| 1 — Chokes: WTI supply-route context; Gold/Risk disruption context | FAIL: `THESIS_LAYER_DEFAULTS` has no source consumers. Restored CCTV/traffic remain enabled through embed boot; its code enables AIS only. A direct invocation with restored noise ON returned CCTV, traffic, AIS all ON. Shipping still resets to globe. Density HUD hides on zero records, displays degraded zero counts, and its candidate lookup always returns null. This cannot distinguish unknown coverage from a clear chokepoint. |
+| 3 — Disruption: corroborating energy-corridor / macro-risk observations | FAIL: stale fixtures render LIVE with current Updated time. Aggregation synthesizes fetchedAt on every computation; rendered cards omit source clocks. Disabled AIS [] becomes NONE. AIS analyst records expose speedKts and omit sourceTimestamp while the candidate evaluator requires sog/sourceTimestamp; selected chokepoint is passed as null. No reliable candidate or freshness integration is established. |
+| 2 — PortWatch: dated transit baseline for WTI / trade-risk context | PARTIAL UI, FAIL source admission: context cards label observations as dated and errors as source_unavailable, with no live-congestion or canal-blocked claim observed in the reviewed formatting paths. Proxy still attempts unadmitted data, stamps failed retrievals with current fetchedAt, and aliases trade_value/total_import_export to transits/day without validated unit/region lineage. Future dates classify recent. A real admitted PortWatch source is not verified. |
+
+**Scope boundary:** no Conf/Edge write/import was found in the four reviewed feature modules. FIRMS confidence is source provenance, not thesis Conf. These features can support WTI/Gold/Risk interpretation, but context alone does not establish a trade signal, canal closure, congestion, or causal market effect. The hard-coded corridor percentage claims also need provenance/denominators; they were not independently validated in this code review.
+
+**Verification performed:**
+
+- Focused command: `node --test src/ui/chokeDensityHud.test.mjs src/data/disruptionContext.test.mjs src/data/portWatchOverlay.test.mjs src/data/layerState.test.mjs src/firstRunExperience.test.mjs src/data/sourceFreshness.test.mjs src/data/aisLiveVessels.test.mjs src/data/adsbLolFallback.test.mjs src/data/flights.test.mjs`.
+- Result: 289 reported tests, 284 pass, 5 fail. Four first-run assertions fail (keyboard activation/topmost expectations and four-versus-five mission assertions); HUD test file fails to import undeclared vitest. Executed with Node 20.19.2, below the package's Node 24/26 engine requirement; this is not supported-runtime certification. No failures were repaired or suppressed in this review.
+- Actual Chromium rendered the imported feature modules on the existing local Vite service at port 4174. Deterministic fixtures, explicitly labeled as fixtures, reproduced stale disruption LIVE/current Updated and degraded zero density. A zero-record source-loss probe reported HUD hidden=true. Screenshot and JSON are captured. This is browser-level component evidence, not complete boot, real upstream, map freshness, or user journey acceptance. No service was created or published.
+- Existing sourceFreshness test edits and unrelated untracked files were preserved. No application code was changed, pushed, or claimed as integrated by this review.
+
+**Next action / acceptance gate:** Claude completes [OSA-48](/OSA/issues/OSA-48) with startup/restoration scope wiring, density unknown/candidate semantics, disruption source clocks and AIS adapter, PortWatch admission/null clocks/schema validation, and reproducible checks. Astra then repeats actual-browser startup/mission/source-loss and AIS/aircraft stale-age inspection before final pack acceptance. The prior freshness unit work is useful evidence, not final browser approval. Do not close OSA-41 on document evidence alone.
+
+---
+
 ### Claude OSA-38 — TB6.1 Choke-Defaults (AIS+pills+density HUD) — 2026-09-14
 
 #### Implementation completed

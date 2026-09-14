@@ -63,9 +63,10 @@ export function classifyChokepointDensity(records, getLowSogCandidate) {
 /**
  * Format chokepoint density data for display.
  * @param {Map<string, {total: number, lowSog: number}>} counts
- * @returns {Array<{key: string, name: string, total: number, lowSog: number}>}
+ * @param {{feedAvailable: boolean}} [options]
+ * @returns {Array<{key: string, name: string, total: number, lowSog: number, feedAvailable: boolean}>}
  */
-export function formatChokepointRows(counts) {
+export function formatChokepointRows(counts, { feedAvailable = true } = {}) {
   return DISPLAY_CHOKEPOINTS.map((key) => {
     const data = counts.get(key) || { total: 0, lowSog: 0 };
     return {
@@ -73,6 +74,7 @@ export function formatChokepointRows(counts) {
       name: DISPLAY_NAMES[key] || key.toUpperCase(),
       total: data.total,
       lowSog: data.lowSog,
+      feedAvailable,
     };
   });
 }
@@ -104,13 +106,19 @@ export function renderChokeDensityHud(host, rows, { enabled = false, feedHealthy
 
   for (const row of rows) {
     const hasCandidates = row.lowSog > 0;
-    html += `<div class="choke-hud-row${hasCandidates ? ' choke-hud-row--alert' : ''}">`;
+    const unavailable = row.feedAvailable === false;
+    html += `<div class="choke-hud-row${hasCandidates ? ' choke-hud-row--alert' : ''}${unavailable ? ' choke-hud-row--unavailable' : ''}">`;
     html += `<span class="choke-hud-region">${row.name}</span>`;
-    html += `<span class="choke-hud-count">${row.total}</span>`;
-    if (hasCandidates) {
-      html += `<span class="choke-hud-candidates">${row.lowSog} low-SOG</span>`;
+    if (unavailable) {
+      html += '<span class="choke-hud-count choke-hud-count--unknown">—</span>';
+      html += '<span class="choke-hud-candidates choke-hud-candidates--unavailable">NO DATA</span>';
     } else {
-      html += '<span class="choke-hud-candidates choke-hud-candidates--none">--</span>';
+      html += `<span class="choke-hud-count">${row.total}</span>`;
+      if (hasCandidates) {
+        html += `<span class="choke-hud-candidates">${row.lowSog} low-SOG</span>`;
+      } else {
+        html += '<span class="choke-hud-candidates choke-hud-candidates--none">0 low-SOG</span>';
+      }
     }
     html += '</div>';
   }
@@ -137,26 +145,40 @@ export function renderChokeDensityHud(host, rows, { enabled = false, feedHealthy
 export function createChokeDensityHud({ aisLayer, host }) {
   let timer = null;
   let destroyed = false;
+  let candidateCache = new Map();
+
+  function rebuildCandidateCache() {
+    candidateCache = new Map();
+    if (typeof aisLayer.getAllPositions !== 'function') return;
+    const records = aisLayer.getAllPositions?.(12000) || [];
+    for (const r of records) {
+      if (r._lowSogCandidate) {
+        candidateCache.set(String(r.id ?? r.mmsi), r._lowSogCandidate);
+      }
+    }
+  }
 
   function getLowSogCandidate(mmsi) {
-    if (typeof aisLayer.getAnalystRecords !== 'function') return null;
-    return null;
+    return candidateCache.get(String(mmsi)) || null;
   }
 
   function update() {
     if (destroyed || !host) return;
     const stats = aisLayer.getStats?.() || {};
-    const enabled = stats.count > 0;
+    const enabled = typeof aisLayer.isEnabled === 'function'
+      ? aisLayer.isEnabled() : stats.count > 0 || stats.enabled === true;
     const feedHealthy = !stats.error && !stats.stale;
+    const feedAvailable = stats.count > 0;
 
     if (!enabled) {
       renderChokeDensityHud(host, [], { enabled: false });
       return;
     }
 
+    rebuildCandidateCache();
     const positions = aisLayer.getAllPositions?.(12000) || [];
     const counts = classifyChokepointDensity(positions, getLowSogCandidate);
-    const rows = formatChokepointRows(counts);
+    const rows = formatChokepointRows(counts, { feedAvailable });
     renderChokeDensityHud(host, rows, { enabled: true, feedHealthy });
   }
 

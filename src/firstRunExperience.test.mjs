@@ -220,17 +220,16 @@ test('exclusiveSurfaceActive reads the live body classes', () => {
 
 test('the key handler refuses to act for a card that is not really on screen', () => {
   const module = fs.readFileSync(new URL('./firstRunExperience.js', import.meta.url), 'utf8');
-  assert.match(module, /isActive: \(\) => !closing && isTopmost\(\)/);
-  // Real visibility, not just the class: the class survives while CSS hides the
-  // card, which is precisely how a Scene left an invisible ESC handler armed.
   assert.match(module, /const isTopmost = \(\) => root\.isConnected/);
   assert.match(module, /&& root\.getClientRects\(\)\.length > 0\s*\n\s*&& !coveredByOverlay\(\);/);
+  assert.match(module, /if \(closing \|\| !isTopmost\(\)\) return;/,
+    'the inline handler must bail before consuming anything when it is not topmost');
   const keyboard = fs.readFileSync(new URL('./ui/surfaceKeyboard.js', import.meta.url), 'utf8');
   const handler = keyboard.slice(keyboard.indexOf('const onKeyDown = (event) => {'));
   assert.match(
     handler.slice(0, handler.indexOf("if (event.key === 'Escape')")),
     /!isActive\(\)/,
-    'the handler must bail before consuming anything when it is not topmost',
+    'surfaceKeyboard handler must bail before consuming anything when it is not active',
   );
 });
 
@@ -402,14 +401,9 @@ function missionSpy({ contextOk = true, layerResult = () => true, globe = async 
   };
 }
 
-test('the menu is the four owner-ordered missions', () => {
-  // INFRASTRUCTURE was removed after the owner playtested it: enabling all
-  // three bundled layers at once put ~5,700 entities on a full-earth view and
-  // tanked the frame rate. The layers stay reachable by hand and by voice; what
-  // went is the one-click globe-scale dump. Restoring the tile needs the
-  // globe-LOD declutter first.
+test('the menu is the five owner-ordered missions', () => {
   assert.deepEqual(Object.keys(FIRST_RUN_MISSIONS), [
-    'contacts', 'space-missions', 'environmental', 'explore',
+    'contacts', 'space-missions', 'shipping', 'environmental', 'explore',
   ]);
   assert.equal(FIRST_RUN_MISSIONS.infrastructure, undefined,
     'the infrastructure mission must be gone, not dormant');
@@ -557,7 +551,7 @@ test('markup, startup ordering and accessibility remain pinned', () => {
   const css = readStylesheet(new URL('../style.css', import.meta.url));
 
   assert.match(html, /id="first-run-launcher" role="dialog"[^>]*aria-labelledby="first-run-title"[^>]*hidden/);
-  assert.equal((html.match(/data-first-run-choice=/g) || []).length, 4);
+  assert.equal((html.match(/data-first-run-choice=/g) || []).length, 5);
   assert.match(html, /data-first-run-status[^>]*role="status"[^>]*aria-live="polite"/);
   assert.match(html, /<input type="checkbox" data-first-run-suppress \/>/);
   assert.match(html, /<strong data-first-run-environmental-title>/);
@@ -580,7 +574,7 @@ test('markup, startup ordering and accessibility remain pinned', () => {
 
   // Menu order is the owner's, read straight off the markup.
   const order = [...html.matchAll(/data-first-run-choice="([a-z-]+)"/g)].map((match) => match[1]);
-  assert.deepEqual(order, ['contacts', 'space-missions', 'environmental', 'explore']);
+  assert.deepEqual(order, ['contacts', 'space-missions', 'shipping', 'environmental', 'explore']);
   assert.doesNotMatch(html, /data-first-run-choice="infrastructure"/,
     'the removed tile must leave no markup behind');
 
@@ -618,19 +612,12 @@ test('markup, startup ordering and accessibility remain pinned', () => {
 
 test('the launcher keeps focus, restores it, and never disables the focused button', () => {
   const module = fs.readFileSync(new URL('./firstRunExperience.js', import.meta.url), 'utf8');
-  // aria-disabled, never the `disabled` property: disabling a focused button
-  // drops the keyboard to <body> and strands the visitor outside the launcher.
   assert.match(module, /button\.setAttribute\('aria-disabled', String\(next\)\)/);
   assert.doesNotMatch(module, /button\.disabled = /);
-  // Tab is confined to the launcher, and ESC always releases it.
-  const keyboard = fs.readFileSync(new URL('./ui/surfaceKeyboard.js', import.meta.url), 'utf8');
-  assert.match(module, /keyboard\.activate\(\)/);
-  assert.match(module, /keyboard\.deactivate\(\{ restoreFocus \}\)/);
-  assert.match(keyboard, /event\.key !== 'Tab'/);
-  assert.match(keyboard, /event\.key === 'Escape'/);
-  assert.match(keyboard, /target\?\.focus/);
-  // Capture phase, so the app's global letter hotkeys cannot eat the launcher's keys.
-  assert.match(keyboard, /addEventListener\('keydown', onKeyDown, true\)/);
+  assert.match(module, /event\.key !== 'Tab'/);
+  assert.match(module, /event\.key === 'Escape'/);
+  assert.match(module, /previouslyFocused\?\.focus/);
+  assert.match(module, /addEventListener\('keydown', onKeyDown, true\)/);
 });
 
 test('the DISPLAY rail starts collapsed on a first run, and a stored choice wins', () => {
@@ -720,20 +707,26 @@ test('isEmbedBootPath returns false for null location', () => {
   assert.strictEqual(isEmbedBootPath(undefined), false);
 });
 
-test('runEmbedBoot enables ais-live-vessels and flies to globe', async () => {
-  const calls = [];
+test('runEmbedBoot applies thesis defaults and flies to globe', async () => {
+  const enabled = [];
+  const disabled = [];
   const result = await runEmbedBoot({
-    setLayerEnabled: async (id) => { calls.push(`enable:${id}`); return true; },
-    flyToGlobe: async () => { calls.push('flyToGlobe'); },
+    setLayerEnabled: async (id) => { enabled.push(id); return true; },
+    setLayerDisabled: async (id) => { disabled.push(id); return true; },
+    flyToGlobe: async () => {},
   });
   assert.ok(result.ok);
-  assert.ok(calls.includes('enable:ais-live-vessels'));
-  assert.ok(calls.includes('flyToGlobe'));
+  assert.ok(enabled.includes('ais-live-vessels'), 'AIS must be enabled');
+  assert.ok(disabled.includes('cctv'), 'CCTV must be disabled');
+  assert.ok(disabled.includes('traffic'), 'traffic must be disabled');
+  assert.ok(!enabled.includes('cctv'), 'CCTV must not be enabled');
+  assert.ok(!enabled.includes('traffic'), 'traffic must not be enabled');
 });
 
-test('runEmbedBoot succeeds even if AIS enable fails', async () => {
+test('runEmbedBoot succeeds even if enable/disable fails', async () => {
   const result = await runEmbedBoot({
     setLayerEnabled: async () => { throw new Error('fail'); },
+    setLayerDisabled: async () => { throw new Error('fail'); },
     flyToGlobe: async () => {},
   });
   assert.ok(result.ok);
@@ -742,7 +735,18 @@ test('runEmbedBoot succeeds even if AIS enable fails', async () => {
 test('runEmbedBoot succeeds even if flyToGlobe fails', async () => {
   const result = await runEmbedBoot({
     setLayerEnabled: async () => true,
+    setLayerDisabled: async () => true,
     flyToGlobe: async () => { throw new Error('fail'); },
   });
   assert.ok(result.ok);
+});
+
+test('runEmbedBoot works without setLayerDisabled', async () => {
+  const enabled = [];
+  const result = await runEmbedBoot({
+    setLayerEnabled: async (id) => { enabled.push(id); return true; },
+    flyToGlobe: async () => {},
+  });
+  assert.ok(result.ok);
+  assert.ok(enabled.includes('ais-live-vessels'));
 });

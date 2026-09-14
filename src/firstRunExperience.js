@@ -19,6 +19,8 @@
 // Choosing a mission is deliberately NOT durable suppression: picking a mission
 // is enthusiasm, not "never show me this again".
 
+import { THESIS_LAYER_DEFAULTS } from './thesisDefaults.js';
+
 /** Durable suppression. Written ONLY by the "Don't show this again" checkbox. */
 export const FIRST_RUN_STORAGE_KEY = 'gev:first-run-mission:v1';
 /** Per-session dismissal. Written by every close path; scoped to sessionStorage. */
@@ -673,13 +675,19 @@ export function isEmbedBootPath(location = globalThis.location) {
  * @param {() => Promise<any>} deps.flyToGlobe
  * @returns {Promise<{ok: boolean}>}
  */
-export async function runEmbedBoot({ setLayerEnabled, flyToGlobe }) {
+export async function runEmbedBoot({ setLayerEnabled, setLayerDisabled, flyToGlobe }) {
   const flight = Promise.resolve()
     .then(() => flyToGlobe())
     .catch(() => null);
-  try {
-    await setLayerEnabled('ais-live-vessels');
-  } catch { /* AIS enable is best-effort */ }
+  const ops = [];
+  for (const [layerId, enabled] of Object.entries(THESIS_LAYER_DEFAULTS)) {
+    if (enabled) {
+      ops.push(setLayerEnabled(layerId).catch(() => {}));
+    } else if (typeof setLayerDisabled === 'function') {
+      ops.push(setLayerDisabled(layerId).catch(() => {}));
+    }
+  }
+  await Promise.allSettled(ops);
   await flight;
   return { ok: true };
 }

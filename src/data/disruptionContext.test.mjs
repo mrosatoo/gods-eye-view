@@ -148,7 +148,7 @@ test('aggregateDisruptionContext reports nominal when all sources produce data',
   });
   assert.equal(result.status, 'nominal');
   assert.ok(result.allCards.length >= 4);
-  assert.ok(result.fetchedAt);
+  assert.ok(result.aggregatedAt);
 });
 
 test('aggregateDisruptionContext reports empty when sources present but no data', () => {

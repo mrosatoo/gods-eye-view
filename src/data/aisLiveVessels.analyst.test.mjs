@@ -28,8 +28,14 @@ test('ais analyst record: full record maps every contract field', () => {
     courseDeg: 214.0,
     shipType: 'Cargo',
     destination: 'OAKLAND',
-    navStatus: null, // /api/ais-live does not surface NavigationalStatus
+    navStatus: null,
+    sourceTimestamp: null,
   });
+});
+
+test('ais analyst record: lastPositionUtc passes through as sourceTimestamp', () => {
+  const r = mapAnalystRecord({ ...FULL_RECORD, lastPositionUtc: '2026-09-14T10:00:00Z' });
+  assert.equal(r.sourceTimestamp, '2026-09-14T10:00:00Z');
 });
 
 test('ais analyst record: nameless vessel falls back to mmsi id', () => {
