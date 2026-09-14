@@ -11,6 +11,8 @@
 
 import { CHOKEPOINT_BOUNDING_BOXES } from '../thesisDefaults.js';
 import { evaluateLowSog, candidateLabel, clusterLabel } from './aisStuckDetection.js';
+import { acquisitionMsUtc } from './firmsCsv.js';
+import { AIS_POSITION_SLA_MS } from './sourceFreshness.js';
 
 const ENERGY_CORRIDOR_BOXES = Object.freeze({
   'gulf-hormuz': { sw: { lat: 24.0, lon: 50.0 }, ne: { lat: 30.0, lon: 60.0 } },
@@ -45,11 +47,11 @@ export function filterEnergyCorridorFires(fires) {
 
 const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 
-function resolveObservationStatus(newestMs) {
-  if (newestMs == null) return 'nominal';
+export function resolveObservationStatus(newestMs, thresholdMs = STALE_THRESHOLD_MS) {
+  if (newestMs == null) return 'stale';
   const now = Date.now();
   if (newestMs > now + 60_000) return 'future';
-  if (now - newestMs > STALE_THRESHOLD_MS) return 'stale';
+  if (now - newestMs > thresholdMs) return 'stale';
   return 'nominal';
 }
 
@@ -63,8 +65,10 @@ export function summarizeFires(fires) {
   }
   let newestMs = null;
   for (const f of corridorFires) {
-    const t = f.acq_datetime ? Date.parse(f.acq_datetime)
-      : f.acq_date ? Date.parse(f.acq_date) : null;
+    const t = (f.acqDate != null)
+      ? acquisitionMsUtc(f.acqDate, f.acqTime)
+      : f.acq_datetime ? Date.parse(f.acq_datetime)
+      : f.acq_date ? Date.parse(f.acq_date) : NaN;
     if (Number.isFinite(t) && (newestMs === null || t > newestMs)) newestMs = t;
   }
   const observedAt = newestMs != null ? new Date(newestMs).toISOString() : null;
@@ -130,8 +134,10 @@ export function summarizeAisCandidates(vessels, chokepoint) {
     if (Number.isFinite(t) && (newestMs === null || t > newestMs)) newestMs = t;
   }
   const observedAt = newestMs != null ? new Date(newestMs).toISOString() : null;
-  const status_base = resolveObservationStatus(newestMs);
+  const freshnessStatus = resolveObservationStatus(newestMs, AIS_POSITION_SLA_MS);
   const { candidates, clusters } = evaluateLowSog(vessels);
+  const qualityRejected = [...candidates.values()]
+    .filter((c) => c.qualityReason != null);
   const validCandidates = [...candidates.entries()]
     .filter(([, info]) => info.candidateType != null);
   const cards = validCandidates.slice(0, 5).map(([mmsi, info]) => ({
@@ -149,9 +155,17 @@ export function summarizeAisCandidates(vessels, chokepoint) {
     source: 'AIS',
   }));
   const hasSignals = validCandidates.length > 0 || clusters.length > 0;
-  const status = status_base === 'stale' ? 'stale'
-    : status_base === 'future' ? 'stale'
-    : hasSignals ? 'nominal' : 'empty';
+  const allRejected = candidates.size > 0 && qualityRejected.length === candidates.size;
+  let status;
+  if (freshnessStatus === 'stale' || freshnessStatus === 'future') {
+    status = 'stale';
+  } else if (allRejected) {
+    status = 'stale';
+  } else if (hasSignals) {
+    status = 'nominal';
+  } else {
+    status = 'empty';
+  }
   return {
     candidates: validCandidates.length,
     clusters: clusters.length,

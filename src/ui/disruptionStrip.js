@@ -252,6 +252,10 @@ export class DisruptionStripController {
     const enabled = this._dataManager.isEnabled('ais-live-vessels');
     if (!enabled) return null;
     if (typeof aisModule?.getAnalystRecords !== 'function') return null;
+    const stats = typeof aisModule.getStats === 'function' ? aisModule.getStats() : {};
+    if (stats.count === 0 && (stats.stale || stats.error || stats.status === 'unavailable')) {
+      return null;
+    }
     try {
       const records = aisModule.getAnalystRecords(5000);
       const vessels = records.map((r) => ({

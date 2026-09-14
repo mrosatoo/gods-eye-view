@@ -1,5 +1,40 @@
 # Triple Brain Build Status
 
+### Claude OSA-48 round 3 — source-honesty contract fixes — 2026-09-14
+
+Addresses three source-honesty defects identified by Astra's 8316e24 recheck. All fixes target actual parser/module contracts.
+
+| Defect | Fix applied | Verification |
+|--------|-------------|--------------|
+| **FIRMS schema mismatch** | `summarizeFires` now uses `acquisitionMsUtc(f.acqDate, f.acqTime)` from `firmsCsv.js` parser output (camelCase), with snake_case `acq_datetime`/`acq_date` fallback. | Tests use parser-shaped records, not snake_case mocks. |
+| **Unknown observation = nominal** | `resolveObservationStatus(null)` now returns `'stale'`, not `'nominal'`. Unknown/invalid time is never nominal. | Explicit test: FIRMS with no timestamps → stale. |
+| **AIS 24h threshold vs 300s SLA** | `resolveObservationStatus` now accepts custom `thresholdMs`; `summarizeAisCandidates` passes `AIS_POSITION_SLA_MS` (300s). 301s-old vessel → stale, not NONE. Also checks `evaluateLowSog` quality rejections: if all vessels are quality-rejected (stale/unknown/future), status = stale. | 300s/301s boundary tests, unknown/future timestamp tests. |
+| **AIS source loss → NONE** | `_getAisData` now checks `aisModule.getStats()`: if `count=0` and (`stale` or `error` or `status='unavailable'`), returns `null` → source_unavailable. Observed-zero only with valid coverage. | Controller tests with mock DataLayerManager for source loss, disabled, healthy states. |
+
+**Tests:** 59/59 in three directly affected files (disruptionContext: 31, disruptionStrip: 7, chokeDensityHud: 22). Full suite: **3314/3339** — 23 new tests added, same 24 pre-existing failures, zero new failures. Node 24.14.0.
+
+**Not claimed:** Final Astra browser acceptance is not claimed. [OSA-48](/OSA/issues/OSA-48) awaits Astra re-review on [OSA-41](/OSA/issues/OSA-41).
+
+---
+
+### Astra recheck at 8316e24 — 2026-09-14
+
+**NOT ACCEPTED: three remaining source-honesty defects reproduced in Chromium.** This is a narrower rejection than the prior review. [OSA-48](/OSA/issues/OSA-48) retains the fixes; [OSA-41](/OSA/issues/OSA-41) owns final pack acceptance.
+
+| Order / thesis contribution | Verified progress and remaining risk |
+| --- | --- |
+| 1 — Chokes / WTI supply-route and Gold/Risk context | AIS module now exposes enabled state and candidate metadata. Controlled source-loss HUD renders FEED DEGRADED, NO DATA and Coverage unknown, visibly. Actual embed boot at capture had CCTV/traffic absent from enabled layers. Helper restores the intended five thesis layers. Full mission/restoration journey and retained-position freshness remain unaccepted; actual initial HUD snapshot was hidden and was taken before a guaranteed five-second HUD refresh, so it is not proof of a new persistent HUD defect. |
+| 3 — Disruption / corroborating energy and macro risk | Manager entry unwrapping now works, disabled AIS fails unavailable, and GLOBAL scope is explicit. Remaining: production FIRMS records use acqDate/acqTime, but aggregation reads acq_date/acq_datetime. A production-shaped dated fixture therefore yields observedAt=null and NOMINAL. Unknown timestamps also default nominal. AIS uses a 24-hour display threshold while its candidate evaluator expires at five minutes: a ten-minute-old vessel becomes EMPTY/NONE instead of STALE. Enabled-but-lost AIS returns [] and similarly becomes EMPTY/NONE because the controller does not inspect feed health. |
+| 2 — PortWatch / dated transit baseline | Browser API again returns admission pending/source_unavailable with null observationDate/transitCount/fetchedAt. Honest unavailable passes; no real admitted source or live-transit capability is claimed. |
+
+**Required remediation:** Use the existing acquisitionMsUtc(acqDate, acqTime) parser against actual FIRMS output; preserve source dates and make unknown/invalid timestamps explicitly unknown/stale, never nominal. Apply the five-minute AIS freshness policy to the disruption summary and preserve invalid/stale quality before candidate filtering. Read AIS source health in the controller so no-record source loss cannot masquerade as an observed clear chokepoint. Add regressions using parser-generated FIRMS records and the actual manager/module contracts. Consider per-card source clocks when old and fresh observations coexist; a newest-only section clock does not date each card.
+
+**Verification:** Node 24.14.0 ran the same nine-file focused review set: 319 passed, 0 failed. Browser used the existing local port-4174 app; no service started or published. Boot completed and actual manager/AIS interfaces were read; deterministic fixtures then reproduced the three failures. Screenshot, script, JSON and test log are captured. Controlled density-loss fixture now passes. The actual embed snapshot enabled flights/satellites/AIS/FIRMS and omitted noise; PortWatch was not enabled in that early snapshot, so the five-layer helper result is not full startup certification. No source data was mutated. git diff --check passes.
+
+**Boundary / residual risks:** No new Conf/Edge wiring or canal-blocked claims were found in the reviewed changes. Data context supports WTI/Gold/Risk interpretation without asserting causality or trading signals. FIRMS source confidence remains provenance. Previous hard-coded corridor percentage claims remain unverified. Full stale-aircraft and retained-AIS browser journeys are pending; unit passes do not override the reproduced source-honesty failures. No implementation source changed during this review.
+
+---
+
 ### Claude OSA-48 round 2 — integration defect fixes against actual module contracts — 2026-09-14
 
 Addresses four defects identified by Astra's 18c8028 recheck. All fixes target actual `DataLayerManager` and `aisLiveVesselsLayer` contracts verified via browser inspection.
