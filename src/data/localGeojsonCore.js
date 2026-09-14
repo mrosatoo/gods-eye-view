@@ -764,23 +764,22 @@ export function createLocalGeoJsonLayer(
                   if (targetPos) {
                     const carto = Cesium.Cartographic.fromCartesian(targetPos);
 
-                    // Disable interactions so Cesium doesn't magically cancel the flight
-                    viewer.scene.screenSpaceCameraController.enableInputs = false;
-
-                    viewer.camera.flyTo({
-                      destination: Cesium.Cartesian3.fromRadians(
-                        carto.longitude,
-                        carto.latitude,
-                        5000,
-                      ),
-                      duration: 1.5,
-                      complete: () => {
-                        viewer.scene.screenSpaceCameraController.enableInputs = true;
-                      },
-                      cancel: () => {
-                        viewer.scene.screenSpaceCameraController.enableInputs = true;
-                      },
-                    });
+                    const releaseGuard = viewer.gevInputGuard?.acquire('geojson-flyto')
+                      ?? (() => { viewer.scene.screenSpaceCameraController.enableInputs = true; });
+                    try {
+                      viewer.camera.flyTo({
+                        destination: Cesium.Cartesian3.fromRadians(
+                          carto.longitude,
+                          carto.latitude,
+                          5000,
+                        ),
+                        duration: 1.5,
+                        complete: () => releaseGuard(),
+                        cancel: () => releaseGuard(),
+                      });
+                    } catch {
+                      releaseGuard();
+                    }
                   }
                 }
               }, Cesium.ScreenSpaceEventType.LEFT_CLICK);

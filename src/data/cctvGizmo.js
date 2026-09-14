@@ -204,6 +204,7 @@ function ringPositions(center, radius, basisA, basisB) {
 export function createCalibrationGizmo({ viewer, getActiveRecord, applyPatch, endPatch }) {
   let enabled = false;
   let drag = null; // { part, startCal, basePose, refs... }
+  let releaseDragGuard = null;
   let hoveredId = null;
   let lastDragAt = 0;
   let lastHoverAt = 0;
@@ -437,9 +438,9 @@ export function createCalibrationGizmo({ viewer, getActiveRecord, applyPatch, en
 
     drag = state;
     setCursor('grabbing');
-    if (scene.screenSpaceCameraController) {
-      scene.screenSpaceCameraController.enableInputs = false;
-    }
+    releaseDragGuard?.();
+    releaseDragGuard = viewer.gevInputGuard?.acquire('cctv-gizmo')
+      ?? (() => { if (scene.screenSpaceCameraController) scene.screenSpaceCameraController.enableInputs = true; });
     return true;
   }
 
@@ -491,9 +492,8 @@ export function createCalibrationGizmo({ viewer, getActiveRecord, applyPatch, en
     if (!drag) return;
     const record = drag.record;
     drag = null;
-    if (scene.screenSpaceCameraController) {
-      scene.screenSpaceCameraController.enableInputs = true;
-    }
+    releaseDragGuard?.();
+    releaseDragGuard = null;
     setCursor(hoveredId ? 'grab' : '');
     endPatch(record);
   }

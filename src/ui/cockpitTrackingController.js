@@ -162,7 +162,9 @@ export function enter() {
   // (perf wave 2)
   this.services.holdContinuousRender('cockpit');
   this.viewer.trackedEntity = undefined;
-  this.viewer.scene.screenSpaceCameraController.enableInputs = false;
+  this._releaseInputGuard?.();
+  this._releaseInputGuard = this.viewer.gevInputGuard?.acquire('cockpit')
+    ?? (() => { this.viewer.scene.screenSpaceCameraController.enableInputs = true; });
   document.body.classList.add('cockpit-mode');
   // Activation writes entry/quick/map visibility directly, bypassing
   // syncEntry's change-only cache — invalidate it so the exit-path
@@ -232,7 +234,12 @@ export function exit({ restoreTracking = true } = {}) {
   this.setVisionMode('optical');
   if (this.signalStream) this.signalStream.hidden = true;
   this.hud?.classList.remove('signals-active');
-  this.viewer.scene.screenSpaceCameraController.enableInputs = true;
+  if (this._releaseInputGuard) {
+    this._releaseInputGuard();
+    this._releaseInputGuard = null;
+  } else {
+    this.viewer.scene.screenSpaceCameraController.enableInputs = true;
+  }
   if (entity && this.viewer.entities.contains(entity))
     entity.show = this.trackedEntityWasShown;
   this.trackedEntityWasShown = true;

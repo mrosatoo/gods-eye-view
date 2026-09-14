@@ -1,4 +1,6 @@
 import * as Cesium from 'cesium';
+import { configureCameraControls, installFixedPivotWheelZoom } from '../cameraControlConfig.js';
+import { createInputGuard } from '../inputGuard.js';
 
 /** Create the standard globe viewer in caller-owned, visible containers. */
 export function createApplicationViewer({ container, creditContainer }) {
@@ -28,6 +30,9 @@ export function createApplicationViewer({ container, creditContainer }) {
     viewer.scene.skyAtmosphere.atmosphereLightIntensity = 18;
     viewer.scene.skyAtmosphere.saturationShift = -0.12;
     viewer.scene.skyAtmosphere.brightnessShift = -0.08;
+    configureCameraControls(viewer);
+    installFixedPivotWheelZoom(viewer);
+    viewer.gevInputGuard = createInputGuard(viewer);
     return viewer;
   } catch (error) {
     viewer.destroy();

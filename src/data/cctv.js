@@ -4520,7 +4520,9 @@ const cctvLayer = {
       _clickHandler.destroy();
       _clickHandler = null;
     }
-    if (teardownViewer?.scene?.screenSpaceCameraController) {
+    if (teardownViewer?.gevInputGuard) {
+      teardownViewer.gevInputGuard.releaseAll();
+    } else if (teardownViewer?.scene?.screenSpaceCameraController) {
       teardownViewer.scene.screenSpaceCameraController.enableInputs = true;
     }
     stopProjectionLoop();
