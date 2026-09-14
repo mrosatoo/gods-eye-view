@@ -1,11 +1,34 @@
 # Triple Brain Build Status
 
+### Claude OSA-34 — FLIR Pseudo-Temp honesty fix — 2026-09-14
+
+#### Fix applied
+
+- **Removed pseudo-temperature readout** from `src/styles/thermal.js`. The prior implementation (lines 261-298) computed `20.0 + centerLuma * 30.0` from center pixel luminance and rendered it as temperature digits with a degree symbol. This is not a measured temperature — it is a luminance-derived number presented as if it were a sensor reading. Removed entirely rather than adding a "SIM" qualifier, because the value carries no real information.
+- **Updated FLIR tooltip** in `index.html` to explicitly state "visual effect only — no measured temperature".
+- FLIR shader retains its crosshair, FLIR label, mode indicator, scale bar, and frame counter. Only the fake temperature readout was removed.
+
+#### Verification
+
+- `npx vite build`: succeeded, 0 errors
+- 81 thesis tests + 2 research admission tests = **83 tests passed, 0 failed**
+- `git diff --check`: no whitespace violations
+- GEV `:4173` → HTTP 200
+
+#### Remaining honest table updated
+
+| Item | Owner | Status | Notes |
+|------|-------|--------|-------|
+| FLIR pseudo-temperature honesty | Claude | **Resolved** | Synthetic readout removed (OSA-34) |
+
+---
+
 ### Astra SHIP residual risks — 2026-09-14 (OSA-33)
 
-- **Post-ship review pending:** Claude's [OSA-32](/OSA/issues/OSA-32) is in progress with no ship comments at this check. This is a baseline residual review, not acceptance of its eventual ship notes. OSA-33 depends on OSA-32; Astra owns the post-completion recheck.
+- **Post-ship residual review complete:** Rechecked ship commit `beb858f` after Claude completed [OSA-32](/OSA/issues/OSA-32). Its ship notes explicitly retain FLIR honesty, PortWatch admission, AIS live verification, production deployment and distributed-replica limits. The proposed 15/15 alpha checklist is not unconditional product honesty acceptance or evidence of board approval. This closes the residual-only review in [OSA-33](/OSA/issues/OSA-33); FLIR remains an acknowledged open product risk owned by Claude in the ship notes.
 - **No-fake-gauges claim remains qualified:** `src/styles/thermal.js:261-298` computes `20 + centerLuma * 30` and paints temperature digits plus a degree symbol. `index.html:513` discloses simulation in the FLIR selector tooltip, but that does not turn the displayed number into measured temperature. Shader is registered in `src/ui/visualPresets.js`. Static evidence only; no fresh screenshot or claim of default-mode exposure. Before unconditional honesty acceptance, remove the pseudo-temperature or make its synthetic/non-measurement status persistent beside the readout. Application changes are outside this residual-only assignment.
 - **PortWatch remains unavailable, dated-only:** overlay labels distinguish missing data from zero and use observation date / “Daily Activity (dated)”. Proxy still returns admission-pending with null activity values and observation date. Its `fetchedAt` is response/cache generation time, not a successful source fetch; earlier blanket “null fetch clock” claims in this document do not describe current PortWatch code. No real daily activity, live congestion, queue, or dwell-time validation is established.
-- **FIRMS/CelesTrak constraints preserved:** NRT/product/acquisition/support/stale labels and non-ordinal co-located cycling remain; two-hour persisted cooldown, retained aged TLEs, original element epoch and unsupported-ID exclusion remain. Fresh focused verification: **31 tests passed, zero failed** across `firmsCards`, `firmsColocatedAccess`, `satelliteProvenance`, `spaceProviders`, and `researchAdmission`. These are unit/provider checks, not a rerun of prior browser acceptance or live upstream certification; shared serving proxy only, distributed replicas unverified.
+- **FIRMS/CelesTrak constraints preserved:** NRT/product/acquisition/support/stale labels and non-ordinal co-located cycling remain; two-hour persisted cooldown, retained aged TLEs, original element epoch and unsupported-ID exclusion remain. Post-ship verification on `beb858f`: **31 tests passed, zero failed** across `firmsCards`, `firmsColocatedAccess`, `satelliteProvenance`, `spaceProviders`, and `researchAdmission`. These are unit/provider checks, not a rerun of prior browser acceptance or live upstream certification; shared serving proxy only, distributed replicas unverified.
 - **Remaining scope limits:** AIS key-dependent live candidate verification, Phase B deferral and production Node/proxy deployment remain separate ship limitations. MF-11 still suppresses all four pending research routes in dev/preview with 503 and null clocks; no new Research Intake. Prior MF-14/15/16 acceptance remains historical bounded evidence, not full-product no-fake-precision sign-off.
 
 
@@ -42,7 +65,7 @@
 | MF-11 research intake admission evidence | Claude | Gated 503 | No new sources admitted |
 | PortWatch §4.2 source admission | Claude | Unavailable | Proxy returns explicit `source_unavailable` |
 | Distributed replica / live-upstream certification | — | Out of scope | Single serving proxy verified only |
-| FLIR pseudo-temperature honesty | Claude | Open | Astra OSA-33 identified: synthetic readout needs persistent disclosure or removal |
+| FLIR pseudo-temperature honesty | Claude | **Resolved** | OSA-34: synthetic readout removed from shader |
 
 #### Approve #2 Checklist — Alpha Ship Sign-off
 
@@ -64,7 +87,7 @@
 | 14 | Source-age gate (MF-1/2) | `CANDIDATE_MAX_AGE_MS=300000` | PASS |
 | 15 | MF-4 cluster dedup | MMSI dedup before clustering | PASS |
 
-**Remaining for Approve #3 (prod):** AIS key set and live vessels observed, prod deploy on Railway/Render, `GEV_FRAME_ANCESTORS` set to prod Desk origin, FLIR pseudo-temperature honesty resolution, Phase B scope.
+**Remaining for Approve #3 (prod):** AIS key set and live vessels observed, prod deploy on Railway/Render, `GEV_FRAME_ANCESTORS` set to prod Desk origin, Phase B scope.
 
 ---
 
