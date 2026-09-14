@@ -1,5 +1,127 @@
 # Triple Brain Build Status
 
+### Claude OSA-51 — TB6 CLOSEOUT after acceptance — 2026-09-14
+
+TB6 acceptance ACCEPTED ([OSA-48](/OSA/issues/OSA-48)/[OSA-41](/OSA/issues/OSA-41)). This closeout verifies the four remaining items from [OSA-37](/OSA/issues/OSA-37) epic.
+
+#### 1. Scope circular black MASK default OFF — CONFIRMED
+
+- `scopeMask.js:104` — `_enabled = false` (module-level default)
+- `sharelink.js:117` — `_scopeEnabled = false` (constructor default)
+- `sharelink.js:208` — URL parse: absent `sc` param → `false`; `sc=0` → off; `sc=1` → on
+- Desk embed URL is `?welcome=0&v=2&l=a` (no `sc=` param) → scope OFF
+- Zoom and photoreal preserved: `_mapStack = 'photoreal'` is the default (`sharelink.js:125`); `map=photoreal` in Desk URL
+- Scope is a user opt-in via the toolbar toggle or share link `sc=1`; never forced on by default or embed
+
+#### 2. Desk God Eye View = GEV only (no Osiris product chrome) — CONFIRMED
+
+- `GodEyeClient.tsx:26` — explicit: "No Osiris product chrome"
+- `god-eye.ts:22-23` — Osiris is "optional look-ref only, never the default embed"
+- Desk embed iframe: `sandbox="allow-scripts allow-same-origin ..." allow="fullscreen" referrerPolicy="no-referrer"`
+- Badge: "Reachable · GEV / God Eye View" (not "LIVE")
+- Isolation badge: "Lagebild only. never feeds Conf"
+- No Osiris runtime, product wrapper, or `osirisai.live` URL in GEV source
+- `--gev-osiris-*` CSS tokens are color names inspired by Osiris aesthetics, not runtime dependency
+
+#### 3. Live freshness — verified and gaps bound
+
+| Feed | Connectivity | Stale enforcement | Clock basis | Status |
+|------|-------------|-------------------|-------------|--------|
+| **AIS vessels** | AISStream.io reachable (0.4s) | 300s SLA (`AIS_POSITION_SLA_MS`); AGE/STALE in chip/card/HUD | `lastPositionUtc` observation time, never receipt | LIVE-capable (key set, 40 ch) |
+| **Flights** | adsb.lol 200 (0.5s); OpenSky blocked | 120s SLA (`AIR_POSITION_SLA_MS`); STALE in tracked label | `time_position` / `seen_pos` observation | LIVE via adsb.lol FALLBACK |
+| **Satellites** | CelesTrak intermittent; 6/8 cache groups fresh today, 2 groups 3d old | **NEW: 24h age-based STALE** in `getStats()` (was hardcoded `false`) | TLE epoch; PROPAGATED label | LIVE via 6h-TTL cache |
+| **Fires (FIRMS)** | firms.modaps.eosdis.nasa.gov reachable (0.3s) | Proxy-driven stale flag + **NEW: 2h age-based STALE backup** | `acqDate`/`acqTime` acquisition time | LIVE (key set, 32 ch; cache fresh today) |
+| **Quakes (USGS)** | earthquake.usgs.gov 200 (0.2s) | **NEW: 300s (5 min) age-based STALE** in `getStats()` (had none) | Event `time` from USGS | LIVE |
+| **Quakes (EMSC)** | seismicportal.eu 200 (0.6s) | **NEW: 30 min age-based STALE**; added `lastUpdate`/`error`/`stale` to `getStats()` (had none) | Event `time` from EMSC | LIVE (un-gated, OSA-49) |
+
+**Freshness fixes applied:**
+- `earthquakes.js` — `QUAKE_STALE_MS = 300_000`; `getStats()` computes `stale` from `_lastUpdate` age
+- `emscQuakes.js` — `EMSC_STALE_MS = 1_800_000`; added `_lastUpdate`/`_lastError` tracking, `stale`/`error`/`count` in `getStats()`
+- `satellites.js` — `SAT_STALE_MS = 86_400_000`; `getStats()` computes `stale` from `_lastUpdate` age (was hardcoded `false`)
+- `firmsHeatmap.js` — `FIRMS_STALE_MS = 7_200_000`; `getStats()` adds independent age-based stale as backup to proxy-driven `_stale`
+
+**Connectivity notes:**
+- OpenSky blocked from this box (TLS timeout). adsb.lol circuit breaker active, honest `X-Flight-Source: adsb.lol` headers
+- CelesTrak intermittently blocked; cached TLEs serve stale. 6/8 groups refreshed today, 2 groups (active, starlink) 3 days old
+- All other sources sub-second reachable
+
+#### 4. Ship checklist — honest residuals
+
+| # | Gate | Status | Evidence |
+|---|------|--------|----------|
+| 1 | Scope default OFF | PASS | `_scopeEnabled = false`; Desk embed omits `sc=` |
+| 2 | Desk = GEV only | PASS | GodEyeClient sandboxed iframe, no Osiris chrome |
+| 3 | AIS fresh or STALE | PASS | 300s SLA; AGE/STALE in all display paths |
+| 4 | Flights fresh or STALE | PASS | 120s SLA; FALLBACK chip when adsb.lol active |
+| 5 | Satellites fresh or STALE | PASS | 24h age stale (was hardcoded false) |
+| 6 | Fires fresh or STALE | PASS | Proxy stale + 2h age backup |
+| 7 | Quakes fresh or STALE | PASS | 5 min age stale (USGS); 30 min (EMSC) |
+| 8 | Unknown = STALE | PASS | `sourceFreshness(null)` → `AGE UNKNOWN · STALE`; `resolveObservationStatus(null)` → `stale` |
+| 9 | No false LIVE | PASS | Chips say ON/STALE/DEGRADED/UNAVAILABLE; badge says Reachable |
+| 10 | Observation clocks preserved | PASS | All feeds use source observation time, never receipt |
+| 11 | Thesis chip | PASS | "Lagebild only · never feeds Conf" |
+| 12 | No Conf/Edge/Hatch | PASS | Isolation verified |
+| 13 | MF-11 gate | PASS | GDACS/NWS/Marine-Weather return 503; EMSC admitted |
+
+**Tests:** 525/525 focused tests pass on Node 24.14.0. `git diff --check` passes. No secrets committed.
+
+**Honest residuals (not blocking this closeout):**
+
+- PortWatch source intentionally unadmitted; proxy returns `source_unavailable` with null clocks. §4.2 admission required for real data.
+- CelesTrak intermittently unreachable from this box; 2 of 8 catalog groups are 3 days old. Serve-stale resilient.
+- OpenSky blocked; adsb.lol regional fallback covers 250nm viewport.
+- Representative AIS coverage, upstream credential continuity, and all geographic/device combinations not certified.
+- Phase B deferred (bounded history, dwell-time, queue length).
+- Production deployment (Railway/Render) not started; single dev-box serving proxy only.
+- Corridor percentage prose in PortWatch cards remains unverified contextual copy.
+
+---
+
+### Astra residual live-bar closeout — 2026-09-14 ([OSA-52](/OSA/issues/OSA-52))
+
+**Broader closeout BLOCKED on [OSA-51](/OSA/issues/OSA-51), owned by Claude.** Earlier TB6 acceptance remains valid for its scoped honesty/entry contract; it is not all-feed freshness certification. Inspected GEV fbd485a and the current Desk checkout.
+
+| Ship criterion | Evidence / disposition |
+| --- | --- |
+| Scope circular MASK default OFF; zoom/photoreal preserved | PASS default implementation and 61-test focused set including scope/default regressions. No camera/map changes made. Desk iframe and new-tab URLs still omit explicit sc=0: OPEN, Claude to lock both entry paths and verify startup. |
+| Desk God Eye View = GEV only | PASS bounded source inspection: GodEyeClient renders GEV iframe and Reachable badge, no Osiris product control. No new deployed Desk/browser certification claimed. |
+| Vessels / flights | Prior accepted production browser fixtures retain UTC position + AGE/STALE for hour-old observations, independent of HTTP success. Retained as prior evidence, not rerun or upstream continuity certification. |
+| Satellites | PROPAGATED TLE epoch/age is present; getStats hardcodes stale:false. Explicit age-based STALE and no-refresh expiry remain unverified/open. Claude owns production-path closure. |
+| Fires | NRT acquisition dates and fetch/error stale paths exist. No-refresh age expiry is not established; getStats depends on fetch-driven _stale. Claude owns clock/source-loss verification and repair as needed. |
+| Quakes | FAIL reproduced through production createEarthquakesLayer/getStats/layerFeedState: day-old metadata.generated + fresh HTTP becomes nominal; another day without refresh remains nominal; retained data after HTTP 503 becomes degraded. Need separate feed-generation/retrieval clocks and age-based STALE. Earthquake occurrence age must not be confused with feed age. |
+| Ship verdict | HOLD broader all-feed freshness closeout. Exact gaps delivered to Claude in OSA-51; Astra resumes independent acceptance when dependency resolves. |
+
+Verification: supported Node 24.14.0; 61/61 scopeMask, reasonableDefaults, sourceFreshness, earthquakes, satelliteProvenance, firmsCards tests passed. Additional deterministic quake probe reproduced the above failures. No application source edits, full-suite run, live-upstream probe, deployment, or new runtime service. Existing uncommitted files were preserved. PortWatch admission, representative AIS coverage and upstream continuity remain honest residuals from earlier acceptance.
+
+
+### Astra final TB6 acceptance at fbd485a — 2026-09-14
+
+**RED-TEAM REVIEW COMPLETE — ACCEPTED for the verified honesty/scope contract.** This verdict supersedes the earlier blocking review sections below. [OSA-48](/OSA/issues/OSA-48) remediation is complete; [OSA-41](/OSA/issues/OSA-41) may close. Acceptance explicitly includes PortWatch's honest unadmitted/unavailable state; it does not assert delivery of real PortWatch observations.
+
+| Ordered gate / thesis contribution | Final evidence and verdict |
+| --- | --- |
+| 1 — Chokes: WTI supply-route context, Gold/Risk disruption context | PASS. Actual Chromium restored CCTV+traffic from local storage, then ran the production Shipping function with the real UI callbacks/manager and camera reset. Both noise layers turned OFF; flights, satellites, AIS, FIRMS and PortWatch settled ON. Embed entry retained that same five-layer state. Separate rejection/false-return probes for both Shipping and embed returned ok:false with cctv/traffic listed as failed. Source-loss density probes previously established visible NO DATA/Coverage unknown rather than false zero. |
+| 3 — Disruption: corroborating energy and macro-risk observations | PASS scoped honesty probes. Parser-shaped FIRMS carries observation date+STALE; expired AIS renders STALE; enabled lost feed renders source_unavailable; disabled data does not become observed NONE. Actual DataLayerManager/module adapter works; AIS scope is explicitly GLOBAL. Aggregation time is labeled separately from source age. |
+| 2 — PortWatch: dated transit baseline | PASS unavailable-state admission gate and activation lifecycle. Real manager now keeps the module enabled, with six cached unavailable results and six shown entities. Hormuz camera capture renders the admission-pending/source_unavailable card. API observationDate, transitCount and fetchedAt remain null. No live congestion, queue time, or canal-blocked claim is introduced. Real source admission remains out of this acceptance claim. |
+
+**Freshness verification:** selected-vessel browser card shows full UTC position time and AGE 3600s / STALE for a retained-old fixture. The prior aircraft browser fixture executes the production poll and label path: a fresh response containing an hour-old position renders AGE 3600s / STALE, and the next empty response preserves STALE. That evidence remains valid because this final change touches manager lifecycle and thesis-entry outcomes, not the source/label implementations. These are controlled browser fixtures, not a guarantee of upstream continuity.
+
+**Final tests:** 449/449 focused tests pass on supported Node 24.14.0, including DataLayerManager tests for the changed lifecycle plus first-run, layer-state, density, disruption controller/aggregation, PortWatch, AIS, aircraft, adsb.lol and sourceFreshness. git diff --check passes. False-return and rejected-promise noise-disable probes pass for both entry paths. No full-suite or live-upstream certification is claimed.
+
+**Durable evidence:** current browser reproduction script, restored-state/mission JSON, failure-result JSON, PortWatch entity text, scene and fixture screenshots, and focused test log are in this review's uploaded bundle. Prior aircraft screenshot/script/JSON are in the [64d78c2 evidence bundle](/api/attachments/ebb1ec03-1f69-4a5c-bdde-1251e40ff406/content). Current review produced no application source, pushed commit, preview or managed service; it inspected the existing local service in isolated temporary browser profiles.
+
+**Residual risks (non-blocking for this verdict):**
+
+- PortWatch source is intentionally unadmitted. Historical/live values, source terms and validated region/unit lineage require separate source admission before any real-data claim.
+- FIRMS labels overlap part of the PortWatch card in the Hormuz screenshot. The unavailable attribution is visible, but full card readability varies with other enabled labels; this is not a clean visual-layout certification.
+- Corridor percentage prose remains unverified contextual copy; this review does not endorse those statistics. The thesis relationship is interpretive, not a causal market inference or trade signal.
+- Actual upstream availability, credential/network continuity, representative AIS coverage, and all geographic/device combinations were not certified. Unknown/source-loss labels remain essential.
+- No Conf/Edge write/import was found in reviewed feature modules; FIRMS confidence is source provenance. No unsupported canal closure was inferred. Explicit later user layer choices outside the tested thesis-entry paths are outside this default-scope verdict.
+
+There is no remaining blocking remediation for this red-team issue. The final disposition is done, with the above limits retained for the parent epic and future source work.
+
+---
+
 ### Claude OSA-48 round 5 — PortWatch activation + honest failure reporting — 2026-09-14
 
 Addresses two lifecycle defects found by Astra at 64d78c2.

@@ -2168,10 +2168,12 @@ const satellitesLayer = {
   },
 
   getStats() {
+    const SAT_STALE_MS = 86_400_000;
+    const stale = _lastUpdate != null && (Date.now() - _lastUpdate) > SAT_STALE_MS;
     return {
       count: _count,
       lastUpdate: _lastUpdate,
-      stale: false,
+      stale,
       status: _lastError === 'CelesTrak unreachable'
         ? 'unavailable'
         : (_lastError ? 'degraded' : 'nominal'),

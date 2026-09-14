@@ -401,3 +401,50 @@ test('malformed earthquake refresh preserves entities, overlays, count and times
     layer.destroy(viewer);
   }
 });
+
+test('getStats stale: false immediately after successful update', async () => {
+  const originalFetch = globalThis.fetch;
+  const viewer = {
+    dataSources: { add(ds) { return ds; }, remove() { return true; } },
+  };
+  const layer = createEarthquakesLayer({
+    overlayHost: { setEntries() {}, setVisible() {}, clearSource() {} },
+  });
+  try {
+    layer.init(viewer);
+    const good = { type: 'Feature', geometry: { type: 'Point', coordinates: [-150, 61] }, properties: { mag: 5, place: 'Test', time: Date.now(), detail: '' } };
+    globalThis.fetch = async () => ({ ok: true, json: async () => ({ type: 'FeatureCollection', features: [good] }) });
+    await layer.update(viewer);
+    assert.equal(layer.getStats().stale, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    layer.destroy(viewer);
+  }
+});
+
+test('getStats stale: true when lastUpdate exceeds 300s threshold', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalDateNow = Date.now;
+  const viewer = {
+    dataSources: { add(ds) { return ds; }, remove() { return true; } },
+  };
+  const layer = createEarthquakesLayer({
+    overlayHost: { setEntries() {}, setVisible() {}, clearSource() {} },
+  });
+  const baseTime = 1_700_000_000_000;
+  let fakeNow = baseTime;
+  Date.now = () => fakeNow;
+  try {
+    layer.init(viewer);
+    const good = { type: 'Feature', geometry: { type: 'Point', coordinates: [-150, 61] }, properties: { mag: 5, place: 'Test', time: baseTime, detail: '' } };
+    globalThis.fetch = async () => ({ ok: true, json: async () => ({ type: 'FeatureCollection', features: [good] }) });
+    await layer.update(viewer);
+    assert.equal(layer.getStats().stale, false, 'fresh after update');
+    fakeNow = baseTime + 300_001;
+    assert.equal(layer.getStats().stale, true, 'stale after 300s');
+  } finally {
+    Date.now = originalDateNow;
+    globalThis.fetch = originalFetch;
+    layer.destroy(viewer);
+  }
+});

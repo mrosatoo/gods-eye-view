@@ -301,6 +301,9 @@ export function createFirmsHeatmapLayer({
      */
     getStats() {
       const now = Date.now();
+      const FIRMS_STALE_MS = 7_200_000;
+      const ageStale = _lastUpdate != null && (now - _lastUpdate) > FIRMS_STALE_MS;
+      const stale = _stale || ageStale;
       const staleText = _lastUpdate ? `STALE · cached ${formatAge(now - _lastUpdate) || '<1h'}` : 'STALE';
       let loadingLabel = '';
       if (_loading) {
@@ -311,6 +314,8 @@ export function createFirmsHeatmapLayer({
         loadingLabel = staleText;
       } else if (_error) {
         loadingLabel = _error;
+      } else if (ageStale) {
+        loadingLabel = staleText;
       } else if (_lastUpdate) {
         loadingLabel = `NRT detections · fetched ${formatAgoMinutes(now - _lastUpdate)}`;
       }
@@ -319,7 +324,7 @@ export function createFirmsHeatmapLayer({
         cells: _cellCount,
         lastUpdate: _lastUpdate,
         loading: _loading,
-        stale: _stale,
+        stale,
         error: _keyRequired ? 'KEY REQUIRED' : (_stale ? staleText : _error),
         loadingLabel,
       };

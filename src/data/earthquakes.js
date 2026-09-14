@@ -150,6 +150,8 @@ export function normalizeEarthquakeSnapshot(geojson) {
   return rows;
 }
 
+const QUAKE_STALE_MS = 300_000;
+
 export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = {}) {
   let _dataSource = null;
   let _count = 0;
@@ -327,9 +329,11 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
   },
 
   getStats() {
+    const stale = _lastUpdate != null && (Date.now() - _lastUpdate) > QUAKE_STALE_MS;
     return {
       count: _count,
       lastUpdate: _lastUpdate,
+      stale,
       error: _lastError,
     };
   },

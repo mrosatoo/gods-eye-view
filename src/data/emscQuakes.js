@@ -11,11 +11,14 @@
 import * as Cesium from 'cesium';
 
 const REFRESH_MS = 15 * 60 * 1000;
+const EMSC_STALE_MS = 1_800_000;
 
 let _viewer = null;
 let _enabled = false;
 let _entities = [];
 let _refreshTimer = null;
+let _lastUpdate = null;
+let _lastError = null;
 
 function magColor(mag) {
   if (mag >= 6) return Cesium.Color.fromCssColorString('rgba(255, 61, 0, 0.7)');
@@ -51,6 +54,8 @@ async function fetchAndRender() {
     const data = await res.json();
     const features = data?.features || [];
 
+    _lastUpdate = Date.now();
+    _lastError = null;
     for (const f of features) {
       const coords = f.geometry?.coordinates;
       const props = f.properties || {};
@@ -89,7 +94,7 @@ async function fetchAndRender() {
       });
       _entities.push(entity);
     }
-  } catch { /* silent failure */ }
+  } catch { _lastError = 'EMSC fetch error'; }
 }
 
 const emscQuakes = {
@@ -109,8 +114,17 @@ const emscQuakes = {
     if (_refreshTimer) { clearInterval(_refreshTimer); _refreshTimer = null; }
     clearEntities();
   },
-  destroy() { this.disable(); _viewer = null; },
-  getStats() { return { enabled: _enabled, quakes: _entities.length }; },
+  destroy() { this.disable(); _viewer = null; _lastUpdate = null; _lastError = null; },
+  getStats() {
+    const stale = _lastUpdate != null && (Date.now() - _lastUpdate) > EMSC_STALE_MS;
+    return {
+      enabled: _enabled,
+      count: _entities.length,
+      lastUpdate: _lastUpdate,
+      stale,
+      error: _lastError,
+    };
+  },
 };
 
 export default emscQuakes;
