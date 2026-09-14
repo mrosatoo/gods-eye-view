@@ -76,6 +76,11 @@ export async function _selectContextMode(
       return false;
     }
     if (!isCurrent()) return false;
+    // Disruption is a display-only context — no managed entry layer needed.
+    if (mode === 'disruption') {
+      this._contextModeEntryIntent = null;
+      return true;
+    }
     // Entry is one transaction: isolation succeeded above, so a failed mode
     // activation must roll the cleared layers back instead of stranding the
     // user in a half-entered mode with an orphaned snapshot.

@@ -55,6 +55,7 @@ export function getContextModeState() {
     entering: this._contextModeEntering || null,
     canContact: !this._contextMode || this._contextMode === 'flights',
     canMission: !this._contextMode || this._contextMode === 'space-missions',
+    canDisruption: !this._contextMode || this._contextMode === 'disruption',
     snapshotCaptured: Boolean(this._contextSessionSnapshot),
   };
 }
@@ -110,7 +111,7 @@ export async function setContextMode(
       };
     }
     const canonical = mode === 'contacts' ? 'flights' : mode;
-    if (!['flights', 'space-missions'].includes(canonical)) {
+    if (!['flights', 'space-missions', 'disruption'].includes(canonical)) {
       return {
         ok: false,
         action: 'set_context_mode',

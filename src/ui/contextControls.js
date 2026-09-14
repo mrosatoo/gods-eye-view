@@ -80,6 +80,8 @@ export class ContextControls {
     if (this.destroyed) return;
     this.destroyed = true;
     this._contextModeGeneration++;
+    this._disruptionController?.destroy();
+    this._disruptionController = null;
     this.listeners.abort();
   }
   async restoreForDisposal() {

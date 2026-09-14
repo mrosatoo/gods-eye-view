@@ -1,6 +1,7 @@
 const CONTEXT_DEPENDENCIES = Object.freeze({
   flights: new Set(['military-awareness', 'flights', 'military', 'ais-live-vessels', 'military-installations']),
   'space-missions': new Set(['rocket-launches', 'satellites']),
+  disruption: new Set([]),
 });
 const CONTEXT_COMPANIONS = new Set(['radio']);
 /** Return whether an origin represents a direct user choice on this route. */
@@ -366,6 +367,7 @@ export function cockpitEntryAllowed({
 export const CONTEXT_MODE_VOICE_NAMES = Object.freeze({
   flights: 'contacts',
   'space-missions': 'space-missions',
+  disruption: 'disruption',
 });
 
 /**

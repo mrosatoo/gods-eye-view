@@ -18,6 +18,8 @@
 @import './src/ui/styles/voice-cost.css';
 @import './src/ui/styles/first-run.css';
 @import './src/ui/styles/provider-settings.css';
+@import './src/ui/styles/disruption.css';
+@import './src/ui/styles/choke-density.css';
 
 /* OSATO GOD EYE — Osiris-inspired Command-Center tokens (owned basis, no Osiris iframe) */
 :root {

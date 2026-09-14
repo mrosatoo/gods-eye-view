@@ -1,9 +1,11 @@
 import { shouldExpandGlobalContextPanel } from '../rightRailPolicy.js';
+import { DisruptionStripController } from './disruptionStrip.js';
 
 export function _initGlobalContextPanel() {
   const contextTabs = [
     this._globalContextFlightsBtn,
     this._globalContextMissionsBtn,
+    this._globalContextDisruptionBtn,
   ].filter(Boolean);
   contextTabs.forEach((tab, index) =>
     this.listen(tab, 'keydown', (event) => {
@@ -77,6 +79,40 @@ export function _initGlobalContextPanel() {
         });
     });
   });
+  this.listen(this._globalContextDisruptionBtn, 'click', () => {
+    if (
+      this.destroyed ||
+      this._contextModeChanging ||
+      this._clearSelectedLayersPromise
+    )
+      return;
+    const nextMode = this._contextMode === 'disruption' ? null : 'disruption';
+    this._claimContextVisualAuthority();
+    void this._runUserFacingContextAction(
+      (notificationToken) =>
+        this._selectContextMode(nextMode, { notificationToken }),
+      'Disruption could not complete the requested transition; try again',
+    ).then((succeeded) => {
+      if (
+        !this.destroyed &&
+        nextMode &&
+        shouldExpandGlobalContextPanel({
+          action: 'disruption',
+          explicitUserAction: true,
+          succeeded: succeeded === true,
+        })
+      )
+        this.actions.setPanelCollapsed('global-context-panel', false, {
+          explicit: true,
+        });
+    });
+  });
+  if (this._disruptionStripHost) {
+    this._disruptionController = new DisruptionStripController({
+      hostElement: this._disruptionStripHost,
+      dataManager: this._dataManager,
+    });
+  }
   this.listen(this._installationsSearchBtn, 'click', () => {
     if (
       this.destroyed ||

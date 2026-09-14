@@ -119,9 +119,14 @@ export function readShellElements(document = globalThis.document) {
     _globalContextMissionsBtn: document.getElementById(
       'global-context-missions-btn',
     ),
+    _globalContextDisruptionBtn: document.getElementById(
+      'global-context-disruption-btn',
+    ),
     _contextModeStandby: document.getElementById('context-mode-standby'),
     _contextFlightsView: document.getElementById('context-flights-view'),
     _contextMissionsView: document.getElementById('context-missions-view'),
+    _contextDisruptionView: document.getElementById('context-disruption-view'),
+    _disruptionStripHost: document.getElementById('disruption-strip-host'),
     _installationsSearchBtn: document.getElementById(
       'installations-search-btn',
     ),

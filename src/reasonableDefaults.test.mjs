@@ -36,6 +36,7 @@ import { AIRCRAFT_BRACKET_FLOOR_ANCHOR } from './data/detectionPolicy.js';
 import {
   SCOPE_FEATHER_RATIO_DEFAULT,
   getScopeMaskFeather,
+  isScopeMaskEnabled,
   scopeMaskGeometry,
   setScopeMaskFeather,
 } from './scopeMask.js';
@@ -71,6 +72,35 @@ function managerForHash(hash) {
   };
   return new ShareLinkManager(viewer);
 }
+
+// ---------------------------------------------------------------------------
+// 1b. Scope mask OFF by default — fullscreen photoreal, no black circle
+// ---------------------------------------------------------------------------
+
+test('first run opens with scope OFF, at every surface that decides it', () => {
+  assert.equal(isScopeMaskEnabled(), false,
+    'the live module starts disabled — fullscreen globe, no circular mask');
+
+  assert.match(indexHtml, /id="scope-toggle"[^>]*\saria-pressed="false"/,
+    'index.html: the scope toggle ships inactive');
+  assert.doesNotMatch(indexHtml, /id="scope-toggle"[^>]*\bactive\b/,
+    'index.html: no active class on the scope button');
+
+  assert.match(shareSource, /this\._scopeEnabled = false;/,
+    'sharelink.js: the generator starts with scope disabled');
+});
+
+test('an explicit sc=1 share link still restores scope ON', () => {
+  const on = managerForHash('#lat=10&lon=20&sc=1').parseInitialHash();
+  assert.equal(on.scopeEnabled, true, 'an explicit sc=1 enables the scope');
+
+  const off = managerForHash('#lat=10&lon=20&sc=0').parseInitialHash();
+  assert.equal(off.scopeEnabled, false, 'an explicit sc=0 keeps it off');
+
+  const absent = managerForHash('#lat=10&lon=20&style=normal').parseInitialHash();
+  assert.equal(absent.scopeEnabled, false,
+    'a link without sc defaults to OFF, matching the new first-run default');
+});
 
 // ---------------------------------------------------------------------------
 // 2. Scope feather — a subtle soft edge on a first run

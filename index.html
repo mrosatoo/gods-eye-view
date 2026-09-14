@@ -432,11 +432,11 @@
       </div>
     </div>
     <div class="pp-toggle-group">
-      <button class="pp-toggle-btn active" id="scope-toggle" title="Scope — the circular viewport mask" aria-pressed="true">
+      <button class="pp-toggle-btn" id="scope-toggle" title="Scope — the circular viewport mask" aria-pressed="false">
         <span class="pp-icon material-symbols-outlined" aria-hidden="true">adjust</span>
         <span class="pp-label">Scope</span>
       </button>
-      <div class="pp-slider-row visible" id="scope-slider-row">
+      <div class="pp-slider-row" id="scope-slider-row">
         <span class="pp-slider-mini-label">Feather</span>
         <!-- Feather starts at an 11% soft scope-mask edge (owner final lock
              2026-08-24, superseding the 08-22 hard-crop and 08-23 8% rulings);
@@ -734,10 +734,14 @@
             <span class="material-symbols-outlined" aria-hidden="true">rocket_launch</span>
             <span>SPACE MISSIONS</span>
           </button>
+          <button id="global-context-disruption-btn" class="context-mode-button" type="button" role="tab" tabindex="-1" aria-selected="false" aria-controls="context-disruption-view" aria-label="DISRUPTION" title="Energy-corridor NRT detections, earthquakes, AIS low-SOG candidates, and headline signal">
+            <span class="material-symbols-outlined" aria-hidden="true">warning</span>
+            <span>DISRUPTION</span>
+          </button>
         </div>
         <div id="context-mode-standby" class="context-mode-standby">
           <strong>SELECT CONTEXT</strong>
-          <span>CONTACTS — nearest planes · vessels · sites<br>SPACE MISSIONS — launches &amp; orbital assets</span>
+          <span>CONTACTS — nearest planes · vessels · sites<br>SPACE MISSIONS — launches &amp; orbital assets<br>DISRUPTION — fires · quakes · AIS candidates · headlines</span>
         </div>
         <section id="context-flights-view" class="context-mode-view" role="tabpanel" aria-labelledby="global-context-flights-btn" hidden>
           <div class="global-context-actions" aria-label="Contact Context actions">
@@ -768,6 +772,14 @@
               <div class="space-mission-roster-list" data-mission-roster-list>
                 <div class="space-mission-roster-empty">LOADING 30-DAY MISSION INDEX</div>
               </div>
+            </div>
+          </div>
+        </section>
+        <section id="context-disruption-view" class="context-mode-view" role="tabpanel" aria-labelledby="global-context-disruption-btn" hidden>
+          <div id="disruption-strip-host" class="disruption-strip-host" aria-label="Disruption Context">
+            <div class="disruption-strip-standby">
+              <strong>DISRUPTION CONTEXT</strong>
+              <span>LOADING — FIRMS · USGS · AIS · HEADLINES</span>
             </div>
           </div>
         </section>
@@ -915,6 +927,9 @@
     </div>
     <p class="key-setup-note" data-key-setup-status role="status" aria-live="polite">The Google Maps key buys the photorealistic planet — everything else stacks on top.</p>
   </aside>
+
+  <!-- Choke Density HUD — per-chokepoint vessel counts + low-SOG candidates -->
+  <div id="choke-density-hud" role="status" aria-live="polite" aria-label="Chokepoint vessel density" hidden></div>
 
   <!-- Intelligence HUD Overlay -->
   <div id="intel-hud"></div>
