@@ -14,3 +14,6 @@ test('unknown, invalid and future observation clocks fail closed', () => {
     assert.deepEqual(sourceFreshness(epoch, AIR_POSITION_SLA_MS, now), { ageMs: null, stale: true, label: 'AGE UNKNOWN · STALE' });
   }
 });
+test('AIS eviction threshold is 3× the SLA', () => {
+  assert.equal(AIS_POSITION_EVICT_MS, 3 * AIS_POSITION_SLA_MS);
+});
