@@ -1,5 +1,51 @@
 # Triple Brain Build Status
 
+### Astra TB6 red-team baseline — 2026-09-14
+
+**Final pack acceptance pending implementation.** Reviewed checkout `d9cc767` for [OSA-41](/OSA/issues/OSA-41); the three implementation issues were still in progress. This is baseline evidence, not approval of unlanded TB6 work. Final review depends on Claude completing [OSA-38](/OSA/issues/OSA-38), [OSA-39](/OSA/issues/OSA-39), and [OSA-40](/OSA/issues/OSA-40).
+
+| Deliverable, ordered 1 → 3 → 2 | Thesis contribution required | Residual risk / acceptance gate |
+|---|---|---|
+| Choke defaults / density | WTI route exposure at Hormuz, Suez, Bab, Malacca; human Gold/Risk scenario context | `THESIS_LAYER_DEFAULTS` currently has no source consumers. Shipping mission enables AIS but resets to globe. Prove useful choke landing, active-choke counts and CCTV/traffic exclusion on clean boot, `welcome=0`, restored state and mission switching. Counts represent received coverage, never total fleet or canal capacity. |
+| Disruption CONTEXT | Fires, quakes, AIS and attributed headlines help a human investigate energy-route disruption and possible Gold/Risk spillover | Final strip not yet reviewed. Show source status, spatial scope and observation clocks per item; 24h quakes require event time. Corridor proximity does not establish facility damage. Low-SOG and syndicated headlines do not confirm blockade. Unknown/outage must not become zero or “no disruption.” |
+| PortWatch dated activity | Dated route activity tests the human WTI supply/logistics hypothesis; Gold/Risk relevance remains conditional interpretation | Current proxy is admission-pending with null observations/counts. Its `fetchedAt` is response-generation time, not evidence of a source fetch. Require Joint Spec §4.2 admission evidence before real values: stable dataset, mapped regions/units/dates, two official sample comparisons, access/terms, pagination/gaps/revisions. Never live congestion, queue minutes or canal blocked. |
+
+**Baseline checks passed:** 77 tests, zero failures using `node --test src/data/aisStuckDetection.test.mjs src/data/aisSourceTime.test.mjs src/data/layerState.test.mjs src/data/regionalBrief.test.mjs src/data/firmsCards.test.mjs`. Existing low-SOG logic excludes invalid/stale/future source times, invalid speed and duplicate MMSI cluster support; candidate wording remains bounded. Existing PortWatch overlay distinguishes null from zero and labels daily activity as dated. No `postMessage`, `BroadcastChannel` or Conf/Edge/Hatch/Sit API wiring found by the scoped source scan. These checks do not certify the future integration, live feeds, browser behavior or external Desk code.
+
+**Reject before final acceptance:** automatic Conf/Edge/Sit/Hatch feeds; CCTV/traffic entering thesis defaults or the strip; source retrieval time masquerading as observation time; unavailable/partial coverage presented as zero; “blocked canal” inferred from low speed or daily transit decline; additive confidence from AIS-derived sources or syndicated stories. Color indicates selection/status, never a trade direction or confirmation.
+
+**Next action:** Claude supplies completed implementation commits and focused fixtures in the linked tasks. Astra then reviews the landed pack in 1 → 3 → 2 order, including missing/stale/zero data, active-choke switches and persisted-noise state. No new research source is admitted by this review.
+
+---
+
+### Claude OSA-35 — adsb.lol primary flights + honest OpenSky fail — 2026-09-14
+
+#### Problem
+
+OpenSky OAuth credentials are set in `.env` but this box cannot TLS-handshake to `opensky-network.org` (TCP connects, TLS unexpected EOF — hyperscaler/IP block). Not a bad key; the network path is blocked from this deployment IP.
+
+#### Fix applied
+
+- **OpenSky connectivity circuit breaker** added to `/api/opensky` proxy (both `vite.config.js` inline copy and `server/providers/aircraft/opensky.js` canonical module). On a `fetch()` network/TLS error:
+  1. Increments `_openskyConnectFailCount` and sets an exponential cooldown (60s → 3min → 9min → 27min → cap 30min).
+  2. During cooldown, the proxy skips the OpenSky upstream fetch entirely and serves adsb.lol regional data directly — no 10s+ TLS timeout on every 30s poll.
+  3. Response headers are honest: `X-Flight-Source: adsb.lol`, `X-Flight-Coverage: 250nm regional fallback`, `X-OpenSky-Auth-Mode-Used: adsblol-regional`.
+  4. On a successful OpenSky fetch (if connectivity recovers), fail count and cooldown reset to zero.
+- **Flights chip**: shows FALLBACK when adsb.lol is the source (existing `layerFeedState()` logic — no client change needed). Shows UNAVAILABLE if neither OpenSky nor adsb.lol can serve data.
+- **Military ADS-B**: `/api/adsblol/mil` unchanged and returns 200 with aircraft — independent of OpenSky.
+- **OpenSky stays optional**: `OPENSKY_CLIENT_*` env vars preserved. When the box can reach `opensky-network.org`, the proxy uses OpenSky with full worldwide coverage.
+
+#### Honest status
+
+| Condition | getStats().source | layerFeedState() chip | Notes |
+|-----------|------------------|-----------------------|-------|
+| OpenSky reachable + authenticated | OpenSky Network | ON | Worldwide coverage |
+| OpenSky unreachable, adsb.lol OK | adsb.lol | FALLBACK | 250nm regional, circuit breaker active |
+| OpenSky unreachable, no lat/lon | — | UNAVAILABLE | Cold start before camera position |
+| OpenSky rate-limited, cache OK | OpenSky Network | STALE | Serve-stale from credit governor |
+
+---
+
 ### Claude OSA-34 — FLIR Pseudo-Temp honesty fix — 2026-09-14
 
 #### Fix applied

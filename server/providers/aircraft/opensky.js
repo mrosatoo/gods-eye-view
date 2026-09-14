@@ -41,6 +41,14 @@ const OPENSKY_CACHE_MS = 9000;
 let _openskyTtlMs = OPENSKY_CACHE_MS;
 /** @type {number} Epoch-ms before which no upstream fetch is attempted. */
 let _openskyCooldownUntil = 0;
+// --- OpenSky connectivity circuit breaker (OSA-35, 2026-09-14) -----------
+// When this box cannot TLS-handshake to opensky-network.org (hyperscaler IP
+// block), every 30s poll hangs for the OS TCP timeout before falling back to
+// adsb.lol. The circuit breaker skips the upstream fetch after a connectivity
+// failure and serves adsb.lol directly, retrying OpenSky on an exponential
+// backoff: 60s → 3min → 9min → 27min → cap 30min.
+let _openskyConnectFailCount = 0;
+let _openskyConnectCooldownUntil = 0;
 /**
  * Picks the cache TTL from the remaining daily credit budget.
  * Client polls every 30 s, so tiers ≤30 s cost the same 480 credits/h; the
@@ -431,6 +439,37 @@ export function openSkyProxy() {
           return;
         }
 
+        // OpenSky connectivity circuit breaker: after TLS/network failures,
+        // serve adsb.lol directly instead of blocking on a doomed fetch.
+        const inConnectCooldown = now < _openskyConnectCooldownUntil;
+        if (inConnectCooldown) {
+          if (
+            await serveAdsbLolPointFallback(
+              req,
+              res,
+              requestedMode,
+              'opensky_unreachable_adsblol_primary',
+            )
+          )
+            return;
+          res.writeHead(
+            502,
+            buildOpenSkyHeaders({
+              cacheStatus: 'MISS',
+              requestedMode,
+              usedMode: 'none',
+              reason: 'opensky_unreachable',
+            }),
+          );
+          res.end(
+            JSON.stringify({
+              error:
+                'OpenSky unreachable (TLS/network); no regional view available.',
+            }),
+          );
+          return;
+        }
+
         const basicUser = process.env.OPENSKY_USERNAME || '';
         const basicPass = process.env.OPENSKY_PASSWORD || '';
         const hasBasicCreds = Boolean(basicUser && basicPass);
@@ -633,6 +672,8 @@ export function openSkyProxy() {
           );
           _openskyTtlMs = openskyAdaptiveTtlMs(remaining);
           _openskyCooldownUntil = 0;
+          _openskyConnectFailCount = 0;
+          _openskyConnectCooldownUntil = 0;
         }
 
         res.writeHead(
@@ -646,7 +687,18 @@ export function openSkyProxy() {
         );
         res.end(body);
       } catch (e) {
-        console.error('[OpenSky Proxy]', e.message);
+        _openskyConnectFailCount++;
+        const connectCooldownMs = Math.min(
+          60_000 * Math.pow(3, Math.min(_openskyConnectFailCount - 1, 4)),
+          1_800_000,
+        );
+        _openskyConnectCooldownUntil = Date.now() + connectCooldownMs;
+        console.error(
+          '[OpenSky Proxy] Connectivity failure #%d, cooldown %ds: %s',
+          _openskyConnectFailCount,
+          Math.round(connectCooldownMs / 1000),
+          e.message,
+        );
         if (_openskyCacheBody) {
           const cachedMeta = _openskyCacheMeta || {
             requestedMode: normalizeOpenSkyAuthMode(
