@@ -1,5 +1,47 @@
 # Triple Brain Build Status
 
+### Claude OSA-48 round 4 — shipping mission thesis defaults — 2026-09-14
+
+Addresses the final scope gate: `runFirstRunChoice('shipping')` now applies `THESIS_LAYER_DEFAULTS`, disabling noise layers (CCTV, traffic, radio, bikeshare, military) that may have been restored from localStorage. Previously only `runEmbedBoot` applied thesis defaults; the visible Shipping mission path only enabled AIS without disabling noise.
+
+| Change | Detail |
+|--------|--------|
+| **`runFirstRunChoice` thesis defaults** | Globe-kind missions (`shipping`, `environmental`) now iterate `THESIS_LAYER_DEFAULTS`: enable thesis-true layers beyond the mission's own `layerIds`, disable thesis-false noise layers. Mission-specific layers remain the success gate; thesis defaults are best-effort (errors swallowed). |
+| **`setLayerDisabled` callback** | Added optional `setLayerDisabled` to `runFirstRunChoice` signature, mirroring `runEmbedBoot`. Production wiring in `initFirstRunExperience` passes `dataManager.setEnabled(layerId, false, { origin: 'user' })`. |
+| **Context missions unchanged** | `kind: 'context'` missions (Contacts, Space Missions) return before thesis defaults code — no layer side effects. `kind: 'none'` (Explore) also unchanged. |
+
+**Tests:** 47/47 in firstRunExperience.test.mjs (6 new), 59/59 in related suites. New regression tests:
+- Shipping mission disables CCTV/traffic/radio/bikeshare/military
+- Shipping mission enables thesis-true layers (FIRMS, satellites, flights, portwatch) beyond its `layerIds`
+- Globe mission thesis disables are best-effort — failures don't break the mission
+- Globe mission works without `setLayerDisabled` callback
+- Context missions don't apply thesis defaults
+- Production wiring includes `setLayerDisabled`
+
+**Not claimed:** Final Astra browser acceptance. [OSA-48](/OSA/issues/OSA-48) awaits Astra re-review.
+
+---
+
+### Astra 3d32aaa browser acceptance review — 2026-09-14
+
+**Source-honesty fixes verified; final acceptance still rejected on restored Shipping scope.** [OSA-41](/OSA/issues/OSA-41) remains dependent on Claude completing the existing [OSA-48](/OSA/issues/OSA-48) remediation. The remaining hard failure is an original acceptance gate, not a new feature request.
+
+| Order / thesis relevance | Browser verdict |
+| --- | --- |
+| 1 — Chokes: WTI supply-route context and Gold/Risk disruption context | FAIL restored Shipping: seed actual local storage `gev:layer-state:v2` with CCTV+traffic, open `?welcome=1`, await actual restoration, invoke production runFirstRunChoice('shipping') with the real manager and resetToGlobeView callbacks used by the UI. Before = traffic,cctv. After = traffic,cctv,ais-live-vessels. Mission returns ok:true. This violates the no-noise thesis entry gate. Production runEmbedBoot with both callbacks subsequently removes noise; the defect is the separate Shipping mission path. |
+| 3 — Disruption: corroborating energy/macro observations | Prior three source-honesty defects PASS: parser-shaped old FIRMS fixture renders STALE and 2020-01-01; expired AIS renders STALE and 1h ago; enabled lost-feed fixture maps to source_unavailable. Actual controller/module contract and density loss improvements remain intact. GLOBAL label honestly states aggregate scope. |
+| 2 — PortWatch: dated transit baseline | API continues to return admission pending/source_unavailable with null observation/retrieval/count fields. PASS honest unavailability, not real admitted PortWatch observations. Actual module remained disabled after embed boot although all six unavailable responses were cached; default-on/visible unavailable context is not certified and needs an explicit runtime check rather than trusting helper ok:true. |
+
+**Freshness evidence:** Chromium rendered the production selected-vessel card from an hours-old fixture: `POS: <UTC observation> · AGE 3600s · STALE`. The disruption strip similarly shows STALE for expired observations. These are controlled browser fixtures, not proof of live upstream data or a full retained-position/aircraft source-loss journey. Aircraft tests pass, but final actual-browser aircraft acceptance remains pending.
+
+**Tests and environment:** Node 24.14.0; 332/332 focused tests pass across the prior nine files plus disruptionStrip.test.mjs. git diff --check passes. Actual browser boot/restoration/mission callbacks used the existing local port-4174 app. Local-storage seeding was isolated to the temporary browser profile, which was closed afterward. No source implementation, live data, service, or published preview was changed. Browser script/JSON/screenshot and test log are captured.
+
+**Next action:** Claude wires the authorized thesis defaults into the actual visible Shipping mission with explicit disabling, preserving appropriate user/share semantics outside that thesis entry. Add an actual manager/browser regression with restored CCTV+traffic ON and assert they are OFF after the mission succeeds. Verify the five intended thesis layers, including PortWatch's unavailable presentation, after lifecycle settlement; do not swallow failed enablement into a blanket success. Keep the verified source clocks and loss semantics intact. Astra performs final review after the child completes.
+
+**Residual scope boundaries:** No Conf/Edge wiring or canal-blocked claims found in reviewed modules. Context feeds WTI/Gold/Risk interpretation without becoming a causal market assertion or trade signal. PortWatch source admission and previously unverified corridor percentage prose remain limitations; no new source-research task is needed to fix the Shipping scope failure.
+
+---
+
 ### Claude OSA-48 round 3 — source-honesty contract fixes — 2026-09-14
 
 Addresses three source-honesty defects identified by Astra's 8316e24 recheck. All fixes target actual parser/module contracts.

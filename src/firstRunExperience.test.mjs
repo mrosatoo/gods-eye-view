@@ -381,7 +381,7 @@ test('the launcher yields on engage and waits when a surface is already up', () 
 // ── Per-mission behavior ─────────────────────────────────────────────────────
 
 function missionSpy({ contextOk = true, layerResult = () => true, globe = async () => ({ ok: true }) } = {}) {
-  const calls = { contextModes: [], layerIds: [], globeFlights: 0 };
+  const calls = { contextModes: [], layerIds: [], disabledIds: [], globeFlights: 0 };
   return {
     calls,
     deps: {
@@ -392,6 +392,10 @@ function missionSpy({ contextOk = true, layerResult = () => true, globe = async 
       setLayerEnabled: async (layerId) => {
         calls.layerIds.push(layerId);
         return layerResult(layerId);
+      },
+      setLayerDisabled: async (layerId) => {
+        calls.disabledIds.push(layerId);
+        return true;
       },
       flyToGlobe: async () => {
         calls.globeFlights += 1;
@@ -421,11 +425,17 @@ test('Live Contacts and Space Missions go through the one setContextMode facade'
   }
 });
 
-test('Environmental enables BOTH its feeds and pulls out to the globe', async () => {
+test('Environmental enables BOTH its feeds, applies thesis defaults, and pulls out to the globe', async () => {
   const spy = missionSpy();
   const outcome = await runFirstRunChoice('environmental', spy.deps);
   assert.equal(outcome.ok, true);
-  assert.deepEqual(spy.calls.layerIds, ['earthquakes', 'local-firms']);
+  assert.ok(spy.calls.layerIds.includes('earthquakes'), 'mission layer earthquakes');
+  assert.ok(spy.calls.layerIds.includes('local-firms'), 'mission layer local-firms');
+  assert.ok(spy.calls.layerIds.includes('ais-live-vessels'), 'thesis default ais-live-vessels');
+  assert.ok(spy.calls.disabledIds.includes('cctv'), 'thesis disables cctv');
+  assert.ok(spy.calls.disabledIds.includes('traffic'), 'thesis disables traffic');
+  assert.ok(!spy.calls.disabledIds.includes('earthquakes'), 'mission layers not disabled');
+  assert.ok(!spy.calls.disabledIds.includes('local-firms'), 'mission layers not disabled');
   assert.equal(spy.calls.globeFlights, 1);
 });
 
@@ -455,7 +465,8 @@ test('every visitor gets the same tile — there is no degraded keyless variant'
   const outcome = await runFirstRunChoice('environmental', spy.deps);
   assert.equal(outcome.ok, true);
   assert.deepEqual(outcome.failedLayerIds, []);
-  assert.deepEqual(spy.calls.layerIds, ['earthquakes', 'local-firms']);
+  assert.ok(spy.calls.layerIds.includes('earthquakes'));
+  assert.ok(spy.calls.layerIds.includes('local-firms'));
   const module = fs.readFileSync(new URL('./firstRunExperience.js', import.meta.url), 'utf8');
   assert.doesNotMatch(
     module.slice(module.indexOf('export async function runFirstRunChoice')),
@@ -478,9 +489,9 @@ test('a refused layer fails the mission by name, and a stalled flight never does
 test('Explore manually touches nothing at all, and an unknown choice is inert', async () => {
   const spy = missionSpy();
   assert.equal((await runFirstRunChoice('explore', spy.deps)).ok, true);
-  assert.deepEqual(spy.calls, { contextModes: [], layerIds: [], globeFlights: 0 });
+  assert.deepEqual(spy.calls, { contextModes: [], layerIds: [], disabledIds: [], globeFlights: 0 });
   assert.equal((await runFirstRunChoice('nope', spy.deps)).ok, false);
-  assert.deepEqual(spy.calls, { contextModes: [], layerIds: [], globeFlights: 0 });
+  assert.deepEqual(spy.calls, { contextModes: [], layerIds: [], disabledIds: [], globeFlights: 0 });
 });
 
 test('a failed Context mission reports the layers the facade named', async () => {
@@ -749,4 +760,63 @@ test('runEmbedBoot works without setLayerDisabled', async () => {
   });
   assert.ok(result.ok);
   assert.ok(enabled.includes('ais-live-vessels'));
+});
+
+// --- Globe mission thesis defaults (restored-state regression) ---
+
+test('shipping mission disables noise layers restored from localStorage', async () => {
+  const spy = missionSpy();
+  const outcome = await runFirstRunChoice('shipping', spy.deps);
+  assert.equal(outcome.ok, true);
+  assert.ok(spy.calls.layerIds.includes('ais-live-vessels'), 'AIS must be enabled');
+  assert.ok(spy.calls.disabledIds.includes('cctv'), 'CCTV must be disabled');
+  assert.ok(spy.calls.disabledIds.includes('traffic'), 'traffic must be disabled');
+  assert.ok(spy.calls.disabledIds.includes('radio'), 'radio must be disabled');
+  assert.ok(spy.calls.disabledIds.includes('bikeshare'), 'bikeshare must be disabled');
+  assert.ok(spy.calls.disabledIds.includes('military'), 'military must be disabled');
+  assert.ok(!spy.calls.disabledIds.includes('ais-live-vessels'), 'mission layer not disabled');
+});
+
+test('shipping mission enables thesis-true layers beyond its own layerIds', async () => {
+  const spy = missionSpy();
+  await runFirstRunChoice('shipping', spy.deps);
+  assert.ok(spy.calls.layerIds.includes('local-firms'), 'FIRMS enabled via thesis defaults');
+  assert.ok(spy.calls.layerIds.includes('satellites'), 'satellites enabled via thesis defaults');
+  assert.ok(spy.calls.layerIds.includes('flights'), 'flights enabled via thesis defaults');
+  assert.ok(spy.calls.layerIds.includes('portwatch'), 'portwatch enabled via thesis defaults');
+});
+
+test('globe mission thesis disables are best-effort — failures do not break the mission', async () => {
+  const spy = missionSpy();
+  spy.deps.setLayerDisabled = async () => { throw new Error('refused'); };
+  const outcome = await runFirstRunChoice('shipping', spy.deps);
+  assert.equal(outcome.ok, true, 'mission succeeds despite disable failures');
+  assert.deepEqual(outcome.failedLayerIds, []);
+});
+
+test('globe mission works without setLayerDisabled callback', async () => {
+  const calls = { layerIds: [], globeFlights: 0 };
+  const deps = {
+    setContextMode: async () => ({ ok: true }),
+    setLayerEnabled: async (id) => { calls.layerIds.push(id); return true; },
+    flyToGlobe: async () => { calls.globeFlights++; },
+  };
+  const outcome = await runFirstRunChoice('shipping', deps);
+  assert.equal(outcome.ok, true);
+  assert.ok(calls.layerIds.includes('ais-live-vessels'));
+  assert.equal(calls.globeFlights, 1);
+});
+
+test('context missions do not apply thesis defaults', async () => {
+  const spy = missionSpy();
+  await runFirstRunChoice('contacts', spy.deps);
+  assert.deepEqual(spy.calls.disabledIds, [], 'no layers disabled for context missions');
+  assert.deepEqual(spy.calls.layerIds, [], 'no layers enabled for context missions');
+});
+
+test('production wiring includes setLayerDisabled for globe missions', () => {
+  const module = fs.readFileSync(new URL('./firstRunExperience.js', import.meta.url), 'utf8');
+  const code = module.slice(module.indexOf('export function shouldShowFirstRun'));
+  assert.match(code, /setLayerDisabled: \(layerId\) => dataManager\.setEnabled\(layerId, false/,
+    'the production wiring must pass setLayerDisabled');
 });

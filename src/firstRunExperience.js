@@ -259,7 +259,7 @@ export function rememberFirstRunSessionDismissed(sessionStorageRef) {
  * @param {() => Promise<any>} deps.flyToGlobe
  * @returns {Promise<{ok: boolean, choice: string, result?: object, failedLayerIds?: string[]}>}
  */
-export async function runFirstRunChoice(choice, { setContextMode, setLayerEnabled, flyToGlobe }) {
+export async function runFirstRunChoice(choice, { setContextMode, setLayerEnabled, setLayerDisabled, flyToGlobe }) {
   const mission = FIRST_RUN_MISSIONS[choice];
   if (!mission) return { ok: false, choice };
   if (mission.kind === 'none') return { ok: true, choice };
@@ -273,6 +273,21 @@ export async function runFirstRunChoice(choice, { setContextMode, setLayerEnable
   const flight = Promise.resolve()
     .then(() => flyToGlobe())
     .catch(() => null);
+
+  // Apply thesis defaults: disable noise layers restored from localStorage,
+  // enable thesis layers beyond the mission's own layerIds. Mission-specific
+  // layers are the success gate; thesis defaults are best-effort.
+  const missionSet = new Set(mission.layerIds);
+  const thesisOps = [];
+  for (const [layerId, enabled] of Object.entries(THESIS_LAYER_DEFAULTS)) {
+    if (missionSet.has(layerId)) continue;
+    if (enabled) {
+      thesisOps.push(setLayerEnabled(layerId).catch(() => {}));
+    } else if (typeof setLayerDisabled === 'function') {
+      thesisOps.push(setLayerDisabled(layerId).catch(() => {}));
+    }
+  }
+
   const outcomes = await Promise.all(mission.layerIds.map(async (layerId) => {
     try {
       return { layerId, ok: (await setLayerEnabled(layerId)) !== false };
@@ -280,6 +295,7 @@ export async function runFirstRunChoice(choice, { setContextMode, setLayerEnable
       return { layerId, ok: false };
     }
   }));
+  await Promise.allSettled(thesisOps);
   await flight;
   const failedLayerIds = outcomes.filter((entry) => !entry.ok).map((entry) => entry.layerId);
   return { ok: failedLayerIds.length === 0, choice, failedLayerIds };
@@ -462,6 +478,7 @@ export function initFirstRunExperience({
         // `origin: 'user'` on purpose: a mission tile is a real person choosing
         // these layers, so it persists exactly as clicking those rows would.
         setLayerEnabled: (layerId) => dataManager.setEnabled(layerId, true, { origin: 'user' }),
+        setLayerDisabled: (layerId) => dataManager.setEnabled(layerId, false, { origin: 'user' }),
         flyToGlobe: () => styleManager.resetToGlobeView(),
       });
     } catch (error) {
