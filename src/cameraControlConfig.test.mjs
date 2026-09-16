@@ -41,7 +41,7 @@ test('configureCameraControls applies all expected SSCC properties', () => {
   assert.equal(ctrl.maximumZoomDistance, MAXIMUM_ZOOM_DISTANCE);
   assert.equal(ctrl.minimumCollisionTerrainHeight, MINIMUM_COLLISION_TERRAIN_HEIGHT);
   assert.equal(ctrl.enableCollisionDetection, true);
-  assert.equal(ctrl._zoomFactor, 3.0);
+  assert.equal(ctrl._zoomFactor, 5.0);
 });
 
 test('configured inertia values are in [0, 1)', () => {
@@ -64,7 +64,7 @@ test('free-globe inertia tuned for fluidity', () => {
 test('WHEEL_ZOOM_FACTOR provides substantial zoom punch', () => {
   assert.ok(WHEEL_ZOOM_FACTOR >= 0.0005, 'zoom factor must be at least 0.0005 for usable wheel zoom');
   assert.ok(WHEEL_ZOOM_FACTOR <= 0.005, 'zoom factor must not exceed 0.005 to avoid overshooting');
-  assert.equal(WHEEL_ZOOM_FACTOR, 0.001, 'zoom factor is the expected production value');
+  assert.equal(WHEEL_ZOOM_FACTOR, 0.0012, 'zoom factor is the expected production value');
 });
 
 test('wheel zoom delta at representative altitudes', () => {

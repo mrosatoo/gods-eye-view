@@ -13,8 +13,8 @@ export const MAXIMUM_ZOOM_DISTANCE = 50_000_000;
 export const MINIMUM_COLLISION_TERRAIN_HEIGHT = 4000;
 
 // Fixed-pivot wheel zoom sensitivity.
-export const WHEEL_ZOOM_FACTOR = 0.001;
-const WHEEL_ZOOM_DECAY = 0.78;
+export const WHEEL_ZOOM_FACTOR = 0.0012;
+const WHEEL_ZOOM_DECAY = 0.72;
 const WHEEL_ZOOM_DEAD_ZONE = 0.4;
 
 export function configureCameraControls(viewer) {
@@ -30,7 +30,7 @@ export function configureCameraControls(viewer) {
   controller.minimumCollisionTerrainHeight = MINIMUM_COLLISION_TERRAIN_HEIGHT;
   controller.enableCollisionDetection = true;
 
-  controller._zoomFactor = 3.0;
+  controller._zoomFactor = 5.0;
 
   return controller;
 }

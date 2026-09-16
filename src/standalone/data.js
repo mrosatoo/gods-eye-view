@@ -9,20 +9,17 @@ import earthquakesLayer from '../data/earthquakes.js';
 import satellitesLayer from '../data/satellites.js';
 import aisLiveVesselsLayer from '../data/aisLiveVessels.js';
 import portWatchOverlay from '../data/portWatchOverlay.js';
-import { createFirmsHeatmapLayer } from '../data/firmsHeatmap.js';
-
-const firmsLayer = createFirmsHeatmapLayer({
-  id: 'local-firms',
-  name: 'FIRMS NRT Detections',
-  icon: '▲',
-  source: 'NASA FIRMS · VIIRS NRT',
-});
 
 const THESIS_IDS = new Set(
   Object.entries(THESIS_LAYER_DEFAULTS).filter(([, v]) => v).map(([k]) => k),
 );
-const THESIS_REGISTRY = LAYER_STATE_REGISTRY.filter((e) => THESIS_IDS.has(e.id));
-const DEFERRED_REGISTRY = LAYER_STATE_REGISTRY.filter((e) => !THESIS_IDS.has(e.id));
+const BOOT_DEFERRED_IDS = new Set(['local-firms']);
+const EAGER_THESIS_REGISTRY = LAYER_STATE_REGISTRY.filter(
+  (e) => THESIS_IDS.has(e.id) && !BOOT_DEFERRED_IDS.has(e.id),
+);
+const DEFERRED_REGISTRY = LAYER_STATE_REGISTRY.filter(
+  (e) => !THESIS_IDS.has(e.id) || BOOT_DEFERRED_IDS.has(e.id),
+);
 
 /** Register the standalone layer catalog before allowing state restoration. */
 export function createStandaloneData({
@@ -48,9 +45,8 @@ export function createStandaloneData({
   dataManager.register(earthquakesLayer);
   dataManager.register(satellitesLayer);
   dataManager.register(aisLiveVesselsLayer);
-  dataManager.register(firmsLayer);
   dataManager.register(portWatchOverlay);
-  dataManager.finalizeRegistrations(THESIS_REGISTRY);
+  dataManager.finalizeRegistrations(EAGER_THESIS_REGISTRY);
 
   // Phase 2: non-thesis layers — deferred until after first paint.
   let deferredAborted = false;
@@ -140,8 +136,7 @@ async function scheduleDeferredLayers(dataManager, isAborted) {
     bikeshareLayer,
     militaryInstallationsLayer,
     militaryAwarenessLayer,
-    // localLayers includes firms which is already registered — skip it.
-    ...localDataLayers.filter((l) => !THESIS_IDS.has(l.id)),
+    ...localDataLayers,
     gdacsAlerts,
     emscQuakes,
     nwsAlerts,
@@ -152,7 +147,7 @@ async function scheduleDeferredLayers(dataManager, isAborted) {
   rocketLaunchesLayer.attachDataManager(dataManager);
   militaryAwarenessLayer.attachDataManager(dataManager);
 
-  // Restore saved state for deferred layers.
+  // Restore saved state for deferred layers; on first boot apply thesis defaults.
   try {
     const storage = globalThis.localStorage;
     const saved = parseStoredLayerState(storage?.getItem?.(LAYER_STATE_STORAGE_KEY));
@@ -160,6 +155,12 @@ async function scheduleDeferredLayers(dataManager, isAborted) {
       const enabledSet = new Set(saved.enabledLayerIds);
       for (const mod of deferredModules) {
         if (enabledSet.has(mod.id)) {
+          dataManager.setEnabled(mod.id, true, { origin: 'programmatic' });
+        }
+      }
+    } else {
+      for (const mod of deferredModules) {
+        if (THESIS_LAYER_DEFAULTS[mod.id]) {
           dataManager.setEnabled(mod.id, true, { origin: 'programmatic' });
         }
       }
