@@ -185,6 +185,24 @@ export class DataLayerManager {
     return true;
   }
 
+  extendRegistrations(layerModules, serializationEntries) {
+    if (!this._registrationsFinalized) throw new Error('extendRegistrations requires initial finalization');
+    if (!Array.isArray(serializationEntries)) throw new Error('Extension serialization entries must be an array');
+    for (const mod of layerModules) this._registerLayer(mod);
+    for (const entry of serializationEntries) {
+      if (!entry?.id || !entry?.disposition) throw new Error('Layer serialization disposition is incomplete');
+      if (this._registrationDispositions.has(entry.id)) throw new Error(`Duplicate layer serialization disposition: ${entry.id}`);
+      if (!VALID_LAYER_SERIALIZATION_DISPOSITIONS.has(entry.disposition)) {
+        throw new Error(`Invalid layer serialization disposition: ${entry.id}`);
+      }
+      this._registrationDispositions.set(entry.id, entry.disposition);
+    }
+    const newIds = layerModules.map((m) => m.id);
+    const missing = newIds.filter((id) => !this._registrationDispositions.has(id));
+    if (missing.length) throw new Error(`Extension layers missing disposition: ${missing.join(', ')}`);
+    this._renderToggles();
+  }
+
   get registrationsFinalized() {
     return this._registrationsFinalized;
   }

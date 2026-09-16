@@ -1,24 +1,28 @@
 import { DataLayerManager } from '../data/manager.js';
+import { LAYER_STATE_REGISTRY, LAYER_STATE_STORAGE_KEY, parseStoredLayerState } from '../data/layerState.js';
+import { THESIS_LAYER_DEFAULTS } from '../thesisDefaults.js';
+import { createChokeDensityHud } from '../ui/chokeDensityHud.js';
+
+// Thesis layers — loaded eagerly for fast boot.
 import flightsLayer from '../data/flights.js';
-import militaryFlightsLayer from '../data/militaryFlights.js';
 import earthquakesLayer from '../data/earthquakes.js';
 import satellitesLayer from '../data/satellites.js';
-import rocketLaunchesLayer from '../data/rocketLaunches.js';
-import trafficLayer from '../data/traffic.js';
-import cctvLayer from '../data/cctv.js';
-import radioLayer from '../data/radio.js';
-import bikeshareLayer from '../data/bikeshare.js';
 import aisLiveVesselsLayer from '../data/aisLiveVessels.js';
-import militaryInstallationsLayer from '../data/militaryInstallations.js';
-import militaryAwarenessLayer from '../data/militaryAwareness.js';
-import localDataLayers from '../data/localLayers.js';
 import portWatchOverlay from '../data/portWatchOverlay.js';
-import gdacsAlerts from '../data/gdacsAlerts.js';
-import emscQuakes from '../data/emscQuakes.js';
-import nwsAlerts from '../data/nwsAlerts.js';
-import marineWeather from '../data/marineWeather.js';
-import { LAYER_STATE_REGISTRY } from '../data/layerState.js';
-import { createChokeDensityHud } from '../ui/chokeDensityHud.js';
+import { createFirmsHeatmapLayer } from '../data/firmsHeatmap.js';
+
+const firmsLayer = createFirmsHeatmapLayer({
+  id: 'local-firms',
+  name: 'FIRMS NRT Detections',
+  icon: '▲',
+  source: 'NASA FIRMS · VIIRS NRT',
+});
+
+const THESIS_IDS = new Set(
+  Object.entries(THESIS_LAYER_DEFAULTS).filter(([, v]) => v).map(([k]) => k),
+);
+const THESIS_REGISTRY = LAYER_STATE_REGISTRY.filter((e) => THESIS_IDS.has(e.id));
+const DEFERRED_REGISTRY = LAYER_STATE_REGISTRY.filter((e) => !THESIS_IDS.has(e.id));
 
 /** Register the standalone layer catalog before allowing state restoration. */
 export function createStandaloneData({
@@ -38,30 +42,21 @@ export function createStandaloneData({
         `Data layers could not be destroyed: ${[...dataManager.layers.keys()].join(', ')}`,
       );
   });
+
+  // Phase 1: thesis layers — registered and finalized eagerly.
   dataManager.register(flightsLayer);
-  dataManager.register(militaryFlightsLayer);
   dataManager.register(earthquakesLayer);
   dataManager.register(satellitesLayer);
-  dataManager.register(rocketLaunchesLayer);
-  rocketLaunchesLayer.attachDataManager(dataManager);
-  dataManager.register(trafficLayer);
-  dataManager.register(cctvLayer);
-  dataManager.register(radioLayer);
-  dataManager.register(bikeshareLayer);
   dataManager.register(aisLiveVesselsLayer);
-  dataManager.register(militaryInstallationsLayer);
-  dataManager.register(militaryAwarenessLayer);
-  militaryAwarenessLayer.attachDataManager(dataManager);
-  for (const layer of localDataLayers) {
-    dataManager.register(layer);
-  }
+  dataManager.register(firmsLayer);
   dataManager.register(portWatchOverlay);
-  dataManager.register(gdacsAlerts);
-  dataManager.register(emscQuakes);
-  dataManager.register(nwsAlerts);
-  dataManager.register(marineWeather);
-  // Restoration starts only after the complete production registry is sealed.
-  dataManager.finalizeRegistrations(LAYER_STATE_REGISTRY);
+  dataManager.finalizeRegistrations(THESIS_REGISTRY);
+
+  // Phase 2: non-thesis layers — deferred until after first paint.
+  let deferredAborted = false;
+  const deferredBoot = scheduleDeferredLayers(dataManager, () => deferredAborted);
+  defer(() => { deferredAborted = true; });
+
   if (allowQaRegistration) {
     window.__gevQaRegisterLayer = (targetManager, layerModule) => {
       if (targetManager !== dataManager)
@@ -95,5 +90,79 @@ export function createStandaloneData({
     defer(() => chokeDensityHud?.destroy());
   }
 
-  return { dataManager };
+  return { dataManager, deferredBoot };
+}
+
+async function scheduleDeferredLayers(dataManager, isAborted) {
+  await new Promise((resolve) => {
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(resolve);
+    else setTimeout(resolve, 200);
+  });
+  if (isAborted()) return;
+
+  const [
+    { default: militaryFlightsLayer },
+    { default: rocketLaunchesLayer },
+    { default: trafficLayer },
+    { default: cctvLayer },
+    { default: radioLayer },
+    { default: bikeshareLayer },
+    { default: militaryInstallationsLayer },
+    { default: militaryAwarenessLayer },
+    { default: localDataLayers },
+    { default: gdacsAlerts },
+    { default: emscQuakes },
+    { default: nwsAlerts },
+    { default: marineWeather },
+  ] = await Promise.all([
+    import('../data/militaryFlights.js'),
+    import('../data/rocketLaunches.js'),
+    import('../data/traffic.js'),
+    import('../data/cctv.js'),
+    import('../data/radio.js'),
+    import('../data/bikeshare.js'),
+    import('../data/militaryInstallations.js'),
+    import('../data/militaryAwareness.js'),
+    import('../data/localLayers.js'),
+    import('../data/gdacsAlerts.js'),
+    import('../data/emscQuakes.js'),
+    import('../data/nwsAlerts.js'),
+    import('../data/marineWeather.js'),
+  ]);
+  if (isAborted()) return;
+
+  const deferredModules = [
+    militaryFlightsLayer,
+    rocketLaunchesLayer,
+    trafficLayer,
+    cctvLayer,
+    radioLayer,
+    bikeshareLayer,
+    militaryInstallationsLayer,
+    militaryAwarenessLayer,
+    // localLayers includes firms which is already registered — skip it.
+    ...localDataLayers.filter((l) => !THESIS_IDS.has(l.id)),
+    gdacsAlerts,
+    emscQuakes,
+    nwsAlerts,
+    marineWeather,
+  ];
+
+  dataManager.extendRegistrations(deferredModules, DEFERRED_REGISTRY);
+  rocketLaunchesLayer.attachDataManager(dataManager);
+  militaryAwarenessLayer.attachDataManager(dataManager);
+
+  // Restore saved state for deferred layers.
+  try {
+    const storage = globalThis.localStorage;
+    const saved = parseStoredLayerState(storage?.getItem?.(LAYER_STATE_STORAGE_KEY));
+    if (saved) {
+      const enabledSet = new Set(saved.enabledLayerIds);
+      for (const mod of deferredModules) {
+        if (enabledSet.has(mod.id)) {
+          dataManager.setEnabled(mod.id, true, { origin: 'programmatic' });
+        }
+      }
+    }
+  } catch { /* best effort — deferred layers stay disabled on corrupt state */ }
 }

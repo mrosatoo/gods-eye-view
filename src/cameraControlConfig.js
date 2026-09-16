@@ -1,8 +1,8 @@
 import * as Cesium from 'cesium';
 
-// Free-globe inertia — preserve upstream Cesium feel per UX thesis.
-export const INERTIA_SPIN = 0.9;
-export const INERTIA_TRANSLATE = 0.9;
+// Free-globe inertia — tuned above Cesium defaults for worldmonitor-like fluidity.
+export const INERTIA_SPIN = 0.92;
+export const INERTIA_TRANSLATE = 0.92;
 export const INERTIA_ZOOM = 0.8;
 
 // Zoom distance bounds.
@@ -13,9 +13,9 @@ export const MAXIMUM_ZOOM_DISTANCE = 50_000_000;
 export const MINIMUM_COLLISION_TERRAIN_HEIGHT = 4000;
 
 // Fixed-pivot wheel zoom sensitivity.
-const WHEEL_ZOOM_FACTOR = 0.0003;
-const WHEEL_ZOOM_DECAY = 0.82;
-const WHEEL_ZOOM_DEAD_ZONE = 0.5;
+export const WHEEL_ZOOM_FACTOR = 0.001;
+const WHEEL_ZOOM_DECAY = 0.78;
+const WHEEL_ZOOM_DEAD_ZONE = 0.4;
 
 export function configureCameraControls(viewer) {
   const controller = viewer.scene.screenSpaceCameraController;

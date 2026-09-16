@@ -8,6 +8,7 @@ import {
   MINIMUM_ZOOM_DISTANCE,
   MAXIMUM_ZOOM_DISTANCE,
   MINIMUM_COLLISION_TERRAIN_HEIGHT,
+  WHEEL_ZOOM_FACTOR,
 } from './cameraControlConfig.js';
 import { createInputGuard } from './inputGuard.js';
 
@@ -54,10 +55,33 @@ test('configured zoom bounds are sane', () => {
   assert.ok(MAXIMUM_ZOOM_DISTANCE > MINIMUM_ZOOM_DISTANCE, 'max > min');
 });
 
-test('free-globe inertia matches upstream Cesium feel', () => {
-  assert.equal(INERTIA_SPIN, 0.9, 'inertiaSpin preserves Cesium default');
-  assert.equal(INERTIA_TRANSLATE, 0.9, 'inertiaTranslate preserves Cesium default');
+test('free-globe inertia tuned for fluidity', () => {
+  assert.equal(INERTIA_SPIN, 0.92, 'inertiaSpin above Cesium default for fluid globe spin');
+  assert.equal(INERTIA_TRANSLATE, 0.92, 'inertiaTranslate above Cesium default for fluid pan');
   assert.equal(INERTIA_ZOOM, 0.8, 'inertiaZoom preserves Cesium default');
+});
+
+test('WHEEL_ZOOM_FACTOR provides substantial zoom punch', () => {
+  assert.ok(WHEEL_ZOOM_FACTOR >= 0.0005, 'zoom factor must be at least 0.0005 for usable wheel zoom');
+  assert.ok(WHEEL_ZOOM_FACTOR <= 0.005, 'zoom factor must not exceed 0.005 to avoid overshooting');
+  assert.equal(WHEEL_ZOOM_FACTOR, 0.001, 'zoom factor is the expected production value');
+});
+
+test('wheel zoom delta at representative altitudes', () => {
+  const deltaY = 100;
+  const altitudes = [500, 10000, 1_000_000];
+  for (const h of altitudes) {
+    const amount = deltaY * WHEEL_ZOOM_FACTOR * Math.max(h, 50);
+    assert.ok(amount > 0, `zoom amount must be positive at ${h}m`);
+    assert.ok(amount < h, `single scroll must not exceed current altitude at ${h}m`);
+  }
+});
+
+test('wheel zoom scales proportionally with altitude', () => {
+  const deltaY = 100;
+  const low = deltaY * WHEEL_ZOOM_FACTOR * Math.max(500, 50);
+  const high = deltaY * WHEEL_ZOOM_FACTOR * Math.max(1_000_000, 50);
+  assert.ok(high / low > 100, 'high-altitude zoom must be orders of magnitude larger than low');
 });
 
 test('inputGuard ref-counting: two holders, release one then second', () => {
