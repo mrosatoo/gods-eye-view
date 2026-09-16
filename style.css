@@ -15,7 +15,6 @@
 @import './src/ui/styles/command-dock-compact.css';
 @import './src/ui/styles/command-dock-trays.css';
 @import './src/ui/styles/command-dock-sliding.css';
-@import './src/ui/styles/voice-cost.css';
 @import './src/ui/styles/first-run.css';
 @import './src/ui/styles/provider-settings.css';
 @import './src/ui/styles/disruption.css';
@@ -27,8 +26,8 @@
   --gev-osiris-gold: #ffd700;
   --gev-osiris-cyan-dim: rgba(0, 229, 255, 0.35);
   --gev-osiris-gold-dim: rgba(255, 215, 0, 0.28);
-  --gev-osiris-panel: rgba(6, 14, 22, 0.82);
-  --gev-osiris-border: rgba(0, 229, 255, 0.22);
+  --gev-osiris-panel: var(--glass-bg);
+  --gev-osiris-border: var(--glass-border);
 
   /* Source state tokens (RT-09: distinct states with text labels) */
   --gev-status-live: var(--gev-osiris-cyan);
@@ -90,4 +89,65 @@ button.primary {
   pointer-events: none;
   letter-spacing: 0.5px;
   text-transform: uppercase;
+}
+
+/* Owned HUD: two manual navigation controls; no reserved microphone column.
+   Keep the legacy width token at zero for the shared mobile tray calculations. */
+#command-dock {
+  --dock-voice-width: 0px;
+  gap: 0;
+  background: var(--glass-bg);
+}
+
+#command-dock .panel-title,
+#command-dock .location-toolbar-label {
+  color: var(--text-secondary);
+}
+
+#command-dock .dock-label-icon {
+  background-color: var(--text-secondary);
+}
+
+#command-dock > #control-panel {
+  border-left: 0;
+}
+
+/* Opaque rail cards separate controls from bright imagery and busy feeds. */
+:is(.panel-inner, .data-panel-inner, .global-context-panel-inner,
+    .cctv-panel-inner, .scene-panel-inner) {
+  background-color: var(--glass-bg);
+  border-color: var(--glass-border);
+}
+
+@media (max-width: 900px) {
+  #command-dock {
+    --dock-side-compact: clamp(8rem, 40vw, 10rem);
+  }
+
+  #command-dock .panel-title,
+  #command-dock .location-toolbar-label {
+    max-width: none;
+    overflow: visible;
+    text-overflow: clip;
+    font-size: 0.58rem;
+    letter-spacing: 0.06rem;
+  }
+}
+
+/* Match exploration order and the tray centering math: location on the left. */
+#command-dock > #location-bar {
+  order: -1;
+}
+
+:is(.cctv-panel-inner, .scene-panel-inner),
+#pp-toggles:not(.collapsed) {
+  background-color: var(--glass-bg-secondary);
+}
+
+#command-dock .dock-popover-content {
+  background-color: var(--glass-bg-tertiary);
+}
+
+.data-toggle-row:hover {
+  background-color: rgba(0, 229, 255, 0.1);
 }

@@ -49,6 +49,7 @@ export const KEY_SETUP_KEYS = Object.freeze([
   }),
   Object.freeze({
     id: 'openai',
+    hidden: true, // Voice is WONTFIX in the owned HUD.
     title: 'OPENAI',
     unlocks: 'Voice control — talk to the planet',
     getUrl: 'https://platform.openai.com/api-keys',

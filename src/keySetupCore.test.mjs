@@ -78,8 +78,8 @@ test('the status payload reports presence without any credential material', () =
 });
 
 test('whitespace-only env values do not count as configured', () => {
-  const status = keySetupStatus({ OPENAI_API_KEY: '   ' });
-  assert.equal(status.keys.find((key) => key.id === 'openai').set, false);
+  const status = keySetupStatus({ AISSTREAM_API_KEY: '   ' });
+  assert.equal(status.keys.find((key) => key.id === 'aisstream').set, false);
 });
 
 test('subprocess success requires a clean zero exit', () => {
@@ -361,4 +361,10 @@ test('server Google key remains supported without appearing in setup or its miss
   assert.deepEqual(complete, keySetupStatus({ ...allVisibleConfigured, GOOGLE_MAPS_SERVER_API_KEY: secret }));
   assert.ok(!JSON.stringify(status).includes('GOOGLE_MAPS_SERVER_API_KEY'));
   assert.ok(!JSON.stringify(status).includes(secret));
+});
+
+test('retired voice provider does not appear in setup or contribute to missing keys', () => {
+  const empty = keySetupStatus({});
+  assert.equal(empty.keys.some((key) => key.id === 'openai'), false);
+  assert.deepEqual(keySetupStatus({ OPENAI_API_KEY: 'unused-fixture' }), empty);
 });

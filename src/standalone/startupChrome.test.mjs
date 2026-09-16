@@ -19,6 +19,7 @@ function fixture() {
   const controller = new AbortController();
   const context = {
     console,
+    isEmbedBootPath: () => false,
     setTimeout(fn, delay) {
       const id = ++nextTimer;
       timers.set(id, { fn, delay });

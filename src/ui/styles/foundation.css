@@ -5,15 +5,18 @@
 
 :root {
   --bg-dark: #0a0a0f;
-  --glass-bg: rgba(12, 12, 20, 0.72);
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --glass-border-hover: rgba(255, 255, 255, 0.15);
+  --glass-bg-primary: rgba(8, 18, 28, 0.96);
+  --glass-bg-secondary: rgba(12, 24, 36, 0.96);
+  --glass-bg-tertiary: rgba(16, 30, 42, 0.96);
+  --glass-bg: var(--glass-bg-primary);
+  --glass-border: rgba(0, 229, 255, 0.4);
+  --glass-border-hover: rgba(161, 196, 218, 0.6);
   --accent: #00d4ff;
   --accent-dim: rgba(0, 212, 255, 0.15);
   --accent-glow: rgba(0, 212, 255, 0.4);
   --text-primary: #e8eaed;
-  --text-secondary: rgba(232, 234, 237, 0.5);
-  --text-dim: rgba(232, 234, 237, 0.3);
+  --text-secondary: #bacbd8;
+  --text-dim: #93a9bb;
   --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   --panel-radius: 16px;
