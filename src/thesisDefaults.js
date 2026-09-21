@@ -7,7 +7,7 @@
 
 export const THESIS_LAYER_DEFAULTS = Object.freeze({
   'ais-live-vessels': true,
-  earthquakes: false,
+  earthquakes: true,
   'local-firms': true,
   satellites: true,
   cctv: false,

@@ -37,6 +37,12 @@ import { registerPickOwner, unregisterPickOwner } from './pickRegistry.js';
 import { applyVesselOverlayPolicy } from './vesselLabels.js';
 import { layerFeedState } from './manager.js';
 
+test('AIS polls again before first-connect grace can expire', () => {
+  assert.ok(aisLiveVesselsLayer.updateInterval > 0);
+  // Allow two follow-up snapshots during cold-start grace, not a 60s dead gap.
+  assert.ok(aisLiveVesselsLayer.updateInterval * 2 < AIS_FIRST_CONNECT_GRACE_MS);
+});
+
 test('open feed with vessels is healthy (null)', () => {
   assert.equal(deriveAisFeedError({ status: 'open', lastMessageAt: 1, error: null }, 42), null);
 });
@@ -416,7 +422,8 @@ test('definitive AIS transport failures end grace immediately', () => {
 });
 
 test('first accepted position ends grace and warm data survives later open silence', () => {
-  const clock = makeFakeAisRuntime(7000);
+  const now = Date.now();
+  const clock = makeFakeAisRuntime(now);
   const record = makeRecord();
   _setAisRuntimeForTest(clock.runtime);
   _setVesselOverlayHostForTest({
@@ -435,13 +442,16 @@ test('first accepted position ends grace and warm data survives later open silen
         name: record.name,
         lat: 51.93,
         lon: 4.05,
+        last_position_UTC: new Date(now - 1000).toISOString(),
+        last_position_epoch: Math.floor((now - 1000) / 1000),
       }],
     });
     assert.equal(accepted.reconciled, true);
     let feed = _getVesselFeedStateForTest();
     assert.equal(feed.loading, false);
     assert.equal(feed.firstConnectPhase, 'ready');
-    assert.equal(feed.lastUpdate, 7000);
+    assert.equal(feed.lastUpdate, now);
+    assert.equal(feed.count, 1, 'fresh server epoch-seconds row survives eviction');
     assert.equal(feed.error, null);
     assert.equal(clock.activeCount(), 0);
 
@@ -454,7 +464,7 @@ test('first accepted position ends grace and warm data survives later open silen
     assert.equal(silent.reconciled, false);
     feed = _getVesselFeedStateForTest();
     assert.equal(feed.count, 1);
-    assert.equal(feed.lastUpdate, 7000);
+    assert.equal(feed.lastUpdate, now);
     assert.equal(feed.loading, false);
     assert.equal(feed.firstConnectPhase, 'ready');
     assert.equal(feed.stale, true);
@@ -463,6 +473,28 @@ test('first accepted position ends grace and warm data survives later open silen
     _setVesselStateForTest({ enabled: false });
     _setVesselOverlayHostForTest();
     _setAisRuntimeForTest();
+  }
+});
+
+test('all source-expired positions cannot produce a nominal empty AIS layer', () => {
+  const now = Date.now();
+  const record = makeRecord();
+  _setVesselStateForTest({ viewer: {}, records: [record] });
+  _setVesselOverlayHostForTest({ setEntries() {}, setVisible() {}, clearSource() {} });
+  try {
+    _applyAisFeedSnapshotForTest({}, {
+      status: 'live', lastMessageAt: now,
+      rows: [{ mmsi: record.mmsi, lat: 51.93, lon: 4.05,
+        last_position_UTC: new Date(now - 3600000).toISOString(),
+        last_position_epoch: Math.floor((now - 3600000) / 1000) }],
+    });
+    const feed = _getVesselFeedStateForTest();
+    assert.equal(feed.count, 0);
+    assert.equal(feed.status, 'unavailable');
+    assert.equal(feed.lastUpdate, null);
+  } finally {
+    _setVesselStateForTest({ enabled: false });
+    _setVesselOverlayHostForTest();
   }
 });
 

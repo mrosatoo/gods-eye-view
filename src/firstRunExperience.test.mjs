@@ -787,6 +787,7 @@ test('shipping mission enables thesis-true layers beyond its own layerIds', asyn
   assert.ok(spy.calls.layerIds.includes('local-firms'), 'FIRMS enabled via thesis defaults');
   assert.ok(spy.calls.layerIds.includes('satellites'), 'satellites enabled via thesis defaults');
   assert.ok(spy.calls.layerIds.includes('flights'), 'flights enabled via thesis defaults');
+  assert.ok(spy.calls.layerIds.includes('earthquakes'), 'earthquakes enabled via thesis defaults');
   assert.ok(spy.calls.layerIds.includes('portwatch'), 'portwatch enabled via thesis defaults');
 });
 

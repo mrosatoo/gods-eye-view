@@ -57,7 +57,10 @@ const _scratchFocusScreen = new Cesium.Cartesian2();
 const DEFAULT_API_URL = '/api/ais-live';
 const DEFAULT_RENDER_ROWS = 12000;
 const DEFAULT_ACTIVE_LABELS = 900;
-const REFRESH_MS = 60000;
+// Poll within the first-connect grace window so an initially empty, connecting
+// snapshot can recover before the UI declares the feed unavailable. This reads
+// the shared server cache; it never opens another upstream AISStream socket.
+const REFRESH_MS = 10000;
 /** Bounded wait for the first accepted vessel position in one enabled session. */
 export const AIS_FIRST_CONNECT_GRACE_MS = 30000;
 const AIS_FIRST_CONNECT_LABEL = 'awaiting first AIS position…';
@@ -934,10 +937,14 @@ function applyAisFeedSnapshot(viewer, payload) {
     return { reconciled: false, ...snapshot };
   }
 
-  settleFirstConnectPhase('ready');
   reconcileVessels(viewer, snapshot.acceptedRows);
   applyLowSogCandidates();
   state.count = state.vesselRecords.length;
+  if (state.count === 0) {
+    markAisUnavailable('No drawable AIS positions after freshness filtering');
+    return { reconciled: true, ...snapshot };
+  }
+  settleFirstConnectPhase('ready');
   state.stale = Boolean(payload?.refreshing);
   state.newestPositionAt = payload?.newestPositionAt || null;
   // Not unconditionally null: a degraded feed keeps its reason even though the
@@ -1177,7 +1184,9 @@ function normalizeVessel(row) {
     course: finiteNumber(row.course),
     heading: finiteNumber(row.heading),
     lastPositionUtc: String(row.last_position_UTC || ''),
-    lastPositionEpoch: finiteNumber(row.last_position_epoch),
+    // The server wire contract is Unix seconds; eviction compares milliseconds.
+    lastPositionEpoch: finiteNumber(row.last_position_epoch) === null
+      ? null : Number(row.last_position_epoch) * 1000,
     position,
     // Ellipsoid-surface point (height 0) — feeds ONLY the horizon occluder,
     // which tests against the WGS84 ellipsoid; keep it off the sea datum.

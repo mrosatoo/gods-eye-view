@@ -2496,6 +2496,7 @@ function removeInteraction() {
 
 /** Radio layer lifecycle implementation. */
 export const radioLayer = {
+  showInTogglePanel: false,
   id: 'radio',
   name: 'Radio',
   icon: '◉',

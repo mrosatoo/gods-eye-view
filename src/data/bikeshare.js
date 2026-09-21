@@ -1450,6 +1450,7 @@ function onCameraChanged() {
  * @type {Object}
  */
 const bikeshareLayer = {
+  showInTogglePanel: false,
   id: 'bikeshare',
   name: 'Bikeshare',
   icon: '🚲',

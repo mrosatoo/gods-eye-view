@@ -286,6 +286,12 @@ const portWatchOverlay = {
       freshnessCounts[f] = (freshnessCounts[f] || 0) + 1;
     }
     stats.freshness = freshnessCounts;
+    const usable = freshnessCounts.recent + freshnessCounts.dated + freshnessCounts.stale;
+    stats.count = usable;
+    stats.status = usable === 0 ? 'unavailable'
+      : freshnessCounts.unavailable > 0 || freshnessCounts.undated > 0 ? 'degraded' : 'nominal';
+    stats.stale = freshnessCounts.stale > 0 || freshnessCounts.undated > 0;
+    stats.error = usable === 0 ? 'PortWatch dated activity unavailable' : null;
     return stats;
   },
 };

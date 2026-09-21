@@ -41,6 +41,9 @@ export function layerFeedState(stats = {}) {
   if (GUIDANCE_STATUSES.includes(status)) {
     return state.stale ? 'stale' : 'nominal';
   }
+  // Source choice never makes an old observation fresh. Keep the fallback
+  // attribution in metadata, but give source-age failure the visible chip.
+  if (state.stale || status === 'stale') return 'stale';
   if (
     state.fallback === true ||
     status === 'fallback' ||
@@ -50,7 +53,6 @@ export function layerFeedState(stats = {}) {
   ) {
     return 'fallback';
   }
-  if (state.stale || status === 'stale') return 'stale';
   if (
     state.degraded ||
     presentedError ||

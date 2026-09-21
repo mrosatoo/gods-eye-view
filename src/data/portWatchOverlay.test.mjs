@@ -312,6 +312,7 @@ test('getStats: initial state', () => {
   assert.equal(stats.cached, 0);
   assert.ok(stats.chokepoints > 0);
   assert.ok(stats.freshness);
+  assert.equal(stats.status, 'unavailable');
 });
 
 test('getStats: with cached data reports freshness distribution', () => {
@@ -325,4 +326,12 @@ test('getStats: with cached data reports freshness distribution', () => {
   assert.equal(stats.cached, 2);
   assert.equal(stats.freshness.unavailable, 1);
   assert.equal(stats.freshness.recent, 1);
+  assert.equal(stats.count, 1);
+  assert.equal(stats.status, 'degraded');
+});
+
+test('getStats: a cache containing only failed responses is unavailable', () => {
+  _setDataCacheForTest(new Map([['hormuz', { error: 'source_unavailable' }]]));
+  assert.equal(portWatchOverlay.getStats().status, 'unavailable');
+  assert.equal(portWatchOverlay.getStats().count, 0);
 });

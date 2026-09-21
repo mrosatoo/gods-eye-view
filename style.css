@@ -151,3 +151,13 @@ button.primary {
 .data-toggle-row:hover {
   background-color: rgba(0, 229, 255, 0.1);
 }
+
+/* Thesis surface: transport/disruption feeds, without road or radio utilities.
+   Keep the underlying controls mounted for lifecycle cleanup and old sessions. */
+#traffic-sync-chip,
+#context-radio-dock,
+[data-cockpit-launcher="radio"],
+#cockpit-radio-panel,
+#radio-panel {
+  display: none !important;
+}

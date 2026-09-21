@@ -2170,6 +2170,7 @@ function clearDots() {
  * @type {Object}
  */
 const trafficLayer = {
+  showInTogglePanel: false,
   id: 'traffic',
   name: 'Street Traffic',
   icon: '🚗',
