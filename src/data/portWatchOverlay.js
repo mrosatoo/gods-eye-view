@@ -151,14 +151,15 @@ function fillColor(data) {
   return Cesium.Color.fromCssColorString('rgba(100, 140, 180, 0.15)');
 }
 
-function borderColor(data) {
+function borderColor(data, isThesis = false) {
+  const boost = isThesis ? 0.2 : 0;
   if (data.error || data.transitCount == null) {
-    return new Cesium.Color(0.39, 0.55, 0.71, 0.25);
+    return new Cesium.Color(0.39, 0.55, 0.71, 0.25 + boost);
   }
   if (data.pctChange != null && data.pctChange < -10) {
-    return Cesium.Color.fromCssColorString('rgba(255, 215, 0, 0.35)');
+    return Cesium.Color.fromCssColorString(`rgba(255, 215, 0, ${0.35 + boost})`);
   }
-  return Cesium.Color.fromCssColorString('rgba(100, 140, 180, 0.35)');
+  return Cesium.Color.fromCssColorString(`rgba(100, 140, 180, ${0.35 + boost})`);
 }
 
 function contextCardBgColor(data) {
@@ -187,8 +188,8 @@ function renderOverlays() {
         coordinates: boxToRectangle(box),
         material: fillColor(data),
         outline: true,
-        outlineColor: borderColor(data),
-        outlineWidth: 1,
+        outlineColor: borderColor(data, isThesis),
+        outlineWidth: isThesis ? 2 : 1,
         height: 0,
       },
       label: {
@@ -202,10 +203,10 @@ function renderOverlays() {
         horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
         pixelOffset: new Cesium.Cartesian2(0, 0),
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, isThesis ? 4500000 : 3000000),
+        distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, isThesis ? 5500000 : 3000000),
         showBackground: true,
         backgroundColor: contextCardBgColor(data),
-        backgroundPadding: new Cesium.Cartesian2(isThesis ? 10 : 8, isThesis ? 7 : 5),
+        backgroundPadding: new Cesium.Cartesian2(isThesis ? 12 : 8, isThesis ? 8 : 5),
       },
       position: Cesium.Cartesian3.fromDegrees(center.lon, center.lat, 100),
       properties: {

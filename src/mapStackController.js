@@ -459,6 +459,7 @@ export class MapStackController {
     if (enabled) {
       this.viewer.scene.setTerrain(Cesium.Terrain.fromWorldTerrain({
         requestVertexNormals: true,
+        requestWaterMask: true,
       }));
     } else {
       const provider = await this._getKeylessTerrainProvider();
