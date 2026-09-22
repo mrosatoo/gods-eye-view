@@ -30,7 +30,6 @@ export function createApplicationViewer({ container, creditContainer }) {
     viewer.scene.skyAtmosphere.atmosphereLightIntensity = 18;
     viewer.scene.skyAtmosphere.saturationShift = -0.12;
     viewer.scene.skyAtmosphere.brightnessShift = -0.08;
-    viewer.scene.postProcessStages.fxaa.enabled = true;
     configureCameraControls(viewer);
     installFixedPivotWheelZoom(viewer);
     viewer.gevInputGuard = createInputGuard(viewer);
